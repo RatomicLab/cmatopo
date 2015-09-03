@@ -21,9 +21,9 @@ bool ST_OrderingEquals(const GEOSGeom g1, const GEOSGeom g2);
 
 double ST_X(const GEOSGeom geom);
 double ST_Y(const GEOSGeom geom);
+double ST_Azimuth(GEOSContextHandle_t geos, const GEOSGeometry* g1, const GEOSGeometry* g2);
 double ST_Distance(const GEOSGeom g1, const GEOSGeom g2);
 double _ST_MinTolerance(const GEOSGeom geom);
-double ST_Azimuth(GEOSContextHandle_t geos, const GEOSGeometry* g1, const GEOSGeometry* g2);
 
 GEOSGeom ST_Snap(const GEOSGeom g1, const GEOSGeom g2, double tolerance);
 GEOSGeom ST_Split(const GEOSGeometry* in, const GEOSGeometry* blade_in);
