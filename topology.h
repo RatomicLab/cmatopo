@@ -27,7 +27,7 @@ class _span_t {
 class Topology
 {
 public:
-    Topology(GEOSContextHandle_t geos);
+    Topology();
     ~Topology();
 
     template <class T>
@@ -57,8 +57,6 @@ public:
     int ST_AddIsoNode(const GEOSGeom point);
 
 private:
-    GEOSContextHandle_t _geos;
-
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
     std::vector<face*> _faces;

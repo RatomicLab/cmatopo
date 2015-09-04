@@ -10,9 +10,8 @@ using namespace std;
 
 namespace cma {
 
-Topology::Topology(GEOSContextHandle_t geos)
-: _geos(geos)
-, _nodes()
+Topology::Topology()
+: _nodes()
 , _edges()
 , _faces()
 {
@@ -34,7 +33,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
     }
 
     // 1. Self-node
-    GEOSGeom noded = GEOSUnaryUnion_r(_geos, line);
+    GEOSGeom noded = GEOSUnaryUnion_r(hdl, line);
 
     // 2. Node to edges falling within tolerance distance
     vector<GEOSGeom> nearby;
@@ -45,7 +44,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
     }
 
     GEOSGeom iedges = GEOSGeom_createCollection_r(
-        _geos,
+        hdl,
         GEOS_MULTILINESTRING,
         nearby.data(),
         nearby.size()
@@ -61,7 +60,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
     }
 
     GEOSGeom inodes = GEOSGeom_createCollection_r(
-        _geos,
+        hdl,
         GEOS_MULTIPOINT,
         nearby.data(),
         nearby.size()
@@ -69,39 +68,39 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 
     nearby.clear();
 
-    if (inodes && !GEOSisEmpty_r(_geos, inodes)) {
+    if (inodes && !GEOSisEmpty_r(hdl, inodes)) {
         noded = ST_Snap(noded, inodes, tolerance);
 
-        int nbNodes = GEOSGetNumGeometries_r(_geos, inodes);
+        int nbNodes = GEOSGetNumGeometries_r(hdl, inodes);
 
         for (int i = 0; i < nbNodes; ++i) {
-            GEOSGeom coll = ST_Split(noded, GEOSGetGeometryN_r(_geos, inodes, i));
-            assert (GEOSGetNumGeometries_r(_geos, coll) == 2);
+            GEOSGeom coll = ST_Split(noded, GEOSGetGeometryN_r(hdl, inodes, i));
+            assert (GEOSGetNumGeometries_r(hdl, coll) == 2);
             noded = ST_Collect(
-                GEOSGeom_clone_r(_geos, GEOSGetGeometryN_r(_geos, coll, 0)),
-                GEOSGeom_clone_r(_geos, GEOSGetGeometryN_r(_geos, coll, 1))
+                GEOSGeom_clone_r(hdl, GEOSGetGeometryN_r(hdl, coll, 0)),
+                GEOSGeom_clone_r(hdl, GEOSGetGeometryN_r(hdl, coll, 1))
             );
         }
 
-        noded = GEOSUnaryUnion_r(_geos, noded);
+        noded = GEOSUnaryUnion_r(hdl, noded);
     }
 
     // 3. For each (now-noded) segment, insert an edge
-    int nbNodes = GEOSGetNumGeometries_r(_geos, noded);
+    int nbNodes = GEOSGetNumGeometries_r(hdl, noded);
     for (int i = 0; i < nbNodes; ++i) {
-        const GEOSGeometry* rec = GEOSGetGeometryN_r(_geos, noded, i);
+        const GEOSGeometry* rec = GEOSGetGeometryN_r(hdl, noded, i);
 
-        int start_node = TopoGeo_AddPoint(ST_StartPoint(_geos, rec), tolerance);
-        int end_node = TopoGeo_AddPoint(ST_EndPoint(_geos, rec), tolerance);
+        int start_node = TopoGeo_AddPoint(ST_StartPoint(rec), tolerance);
+        int end_node = TopoGeo_AddPoint(ST_EndPoint(rec), tolerance);
 
         GEOSGeom sn = _nodes[start_node]->geom;
         GEOSGeom en = _nodes[end_node]->geom;
 
-        GEOSGeom snapped = ST_SetPoint(_geos, ST_SetPoint(_geos, rec, ST_NPoints(rec)-1, en), 0, sn);
+        GEOSGeom snapped = ST_SetPoint(ST_SetPoint(rec, ST_NPoints(rec)-1, en), 0, sn);
 
-        snapped = ST_CollectionExtract(_geos, ST_MakeValid(snapped), 2);
+        snapped = ST_CollectionExtract(ST_MakeValid(snapped), 2);
 
-        if (ST_IsEmpty(_geos, snapped)){
+        if (ST_IsEmpty(snapped)){
             continue;
         }
 
@@ -133,7 +132,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     assert (!_is_null(start_node) && start_node < _nodes.size());
     assert (!_is_null(end_node) && end_node < _nodes.size());
     assert (geom && GEOSGeomTypeId(geom) == GEOS_LINESTRING);
-    assert (GEOSisSimple_r(_geos, geom));
+    assert (GEOSisSimple_r(hdl, geom));
 
     edge* newEdge = new edge();
     newEdge->id = _edges.size();
@@ -144,19 +143,19 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     bool isclosed = start_node == end_node;
     GEOSGeom cleangeom = ST_RemoveRepeatedPoints(newEdge->geom);
 
-    GEOSGeom start_point = ST_StartPoint(_geos, cleangeom);
-    GEOSGeom second_point = ST_PointN(_geos, cleangeom, 2);
+    GEOSGeom start_point = ST_StartPoint(cleangeom);
+    GEOSGeom second_point = ST_PointN(cleangeom, 2);
     _span_t span;
-    span.myaz = ST_Azimuth(_geos, start_point, second_point);
-    GEOSGeom_destroy_r(_geos, start_point);
-    GEOSGeom_destroy_r(_geos, second_point);
+    span.myaz = ST_Azimuth(start_point, second_point);
+    GEOSGeom_destroy_r(hdl, start_point);
+    GEOSGeom_destroy_r(hdl, second_point);
 
-    GEOSGeom end_point = ST_EndPoint(_geos, cleangeom);
-    GEOSGeom next_to_last_point = ST_PointN(_geos, cleangeom, GEOSGeomGetNumPoints_r(_geos, cleangeom)-1);
+    GEOSGeom end_point = ST_EndPoint(cleangeom);
+    GEOSGeom next_to_last_point = ST_PointN(cleangeom, GEOSGeomGetNumPoints_r(hdl, cleangeom)-1);
     _span_t epan;
-    epan.myaz = ST_Azimuth(_geos, end_point, next_to_last_point);
-    GEOSGeom_destroy_r(_geos, end_point);
-    GEOSGeom_destroy_r(_geos, next_to_last_point);
+    epan.myaz = ST_Azimuth(end_point, next_to_last_point);
+    GEOSGeom_destroy_r(hdl, end_point);
+    GEOSGeom_destroy_r(hdl, next_to_last_point);
 
     int nodes[] = {start_node, end_node};
     int i = 0;
@@ -183,20 +182,20 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     // assert (ST_Equals(end_node_geom, ST_EndPoint(geom)));
 
     for (node* n : _nodes) {
-        assert (GEOSRelatePattern_r(_geos, n->geom, geom, "T********") == 0);
+        assert (GEOSRelatePattern_r(hdl, n->geom, geom, "T********") == 0);
     }
 
     for (edge* e : _edges) {
-        char* relate = GEOSRelate_r(_geos, e->geom, geom);
+        char* relate = GEOSRelate_r(hdl, e->geom, geom);
         assert (relate != NULL);
-        if (GEOSRelatePatternMatch_r(_geos, relate, "F********") == 1) {
+        if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
             GEOSFree(relate);
             continue;
         }
 
-        assert (GEOSRelatePatternMatch_r(_geos, relate, "1FFF*FFF2") == 0);
-        assert (GEOSRelatePatternMatch_r(_geos, relate, "1********") == 0);
-        assert (GEOSRelatePatternMatch_r(_geos, relate, "T********") == 0);
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 0);
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
 
         GEOSFree(relate);
     }
@@ -239,13 +238,13 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         scedge->start_node = -1;
         scedge->left_face = 0;
         scedge->right_face = 0;
-        scedge->geom = GEOSGeom_clone_r(_geos, cleangeom);
+        scedge->geom = GEOSGeom_clone_r(hdl, cleangeom);
 
         edge* ecedge = new edge(newEdge);
         ecedge->end_node = -1;
         ecedge->left_face = 0;
         ecedge->right_face = 0;
-        ecedge->geom = GEOSGeom_clone_r(_geos, cleangeom);
+        ecedge->geom = GEOSGeom_clone_r(hdl, cleangeom);
 
         edgesToStartNode.push_back(scedge);
         edgesToEndNode.push_back(ecedge);
@@ -390,26 +389,26 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
             g = ST_Reverse(g);
         }
         else {
-            GEOSGeom_clone_r(_geos, g);
+            GEOSGeom_clone_r(hdl, g);
         }
         geometries.push_back(g);
     }
 
     GEOSGeometry* shell_geoms = GEOSGeom_createCollection_r(
-        _geos,
+        hdl,
         GEOS_MULTILINESTRING,
         geometries.data(),
         geometries.size()
     );
 
     GEOSGeometry* shell = GEOSGeom_createPolygon_r(
-        _geos,
+        hdl,
         shell_geoms,
         NULL,
         0
     );
 
-    bool isccw = GEOSEqualsExact_r(_geos, shell, ST_ForceRHR(shell), 0.) == 0;
+    bool isccw = GEOSEqualsExact_r(hdl, shell, ST_ForceRHR(shell), 0.) == 0;
 
     if (faceId == 0 && !isccw) {
         return NULLint;
@@ -417,7 +416,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
 
     if (mbrOnly && faceId != 0) {
         if (isccw) {
-            _faces[faceId]->mbr = GEOSEnvelope_r(_geos, shell);
+            _faces[faceId]->mbr = GEOSEnvelope_r(hdl, shell);
         }
         return NULLint;
     }
@@ -425,10 +424,10 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
     face* newFace = new face;
     newFace->id = _faces.size();
     if (faceId != 0 && !isccw) {
-        newFace->mbr = GEOSGeom_clone_r(_geos, _faces[faceId]->mbr);
+        newFace->mbr = GEOSGeom_clone_r(hdl, _faces[faceId]->mbr);
     }
     else {
-        newFace->mbr = GEOSEnvelope_r(_geos, shell);
+        newFace->mbr = GEOSEnvelope_r(hdl, shell);
     }
     _faces.push_back(newFace);
 
@@ -452,9 +451,9 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         if ((e->left_face == faceId || e->right_face == faceId) &&
             !_is_in(e->id, absNewRingEdges))
         {
-            GEOSGeom closestPoint = GEOSInterpolate_r(_geos, e->geom, 0.2);
+            GEOSGeom closestPoint = GEOSInterpolate_r(hdl, e->geom, 0.2);
             bool c = ST_Contains(shell, closestPoint);
-            GEOSGeom_destroy_r(_geos, closestPoint);
+            GEOSGeom_destroy_r(hdl, closestPoint);
 
             c = ishole ? !c : c;
 
@@ -524,19 +523,19 @@ void Topology::_find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_
         double az = NULLdbl;
 
         if (e->start_node == nodeId) {
-            GEOSGeom start_point = ST_StartPoint(_geos, e->geom);
-            GEOSGeom second_point = ST_PointN(_geos, e->geom, 2);
-            az = ST_Azimuth(_geos, start_point, second_point);
-            GEOSGeom_destroy_r(_geos, start_point);
-            GEOSGeom_destroy_r(_geos, second_point);
+            GEOSGeom start_point = ST_StartPoint(e->geom);
+            GEOSGeom second_point = ST_PointN(e->geom, 2);
+            az = ST_Azimuth(start_point, second_point);
+            GEOSGeom_destroy_r(hdl, start_point);
+            GEOSGeom_destroy_r(hdl, second_point);
         }
         else {
             // last edge
-            GEOSGeom end_point = ST_EndPoint(_geos, e->geom);
-            GEOSGeom next_to_last_point = ST_PointN(_geos, e->geom, GEOSGeomGetNumPoints_r(_geos, e->geom)-1);
-            az = ST_Azimuth(_geos, end_point, next_to_last_point);
-            GEOSGeom_destroy_r(_geos, end_point);
-            GEOSGeom_destroy_r(_geos, next_to_last_point);
+            GEOSGeom end_point = ST_EndPoint(e->geom);
+            GEOSGeom next_to_last_point = ST_PointN(e->geom, GEOSGeomGetNumPoints_r(hdl, e->geom)-1);
+            az = ST_Azimuth(end_point, next_to_last_point);
+            GEOSGeom_destroy_r(hdl, end_point);
+            GEOSGeom_destroy_r(hdl, next_to_last_point);
 
             e->id = -e->id;
         }
@@ -592,7 +591,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     edge* oldEdge = _edges[edgeId];
     assert (oldEdge);
 
-    assert (ST_Equals(ST_StartPoint(_geos, acurve), ST_StartPoint(_geos, oldEdge->geom)));
+    assert (ST_Equals(ST_StartPoint(acurve), ST_StartPoint(oldEdge->geom)));
 
     if (oldEdge->start_node == oldEdge->end_node) {
         GEOSGeom range = ST_MakePolygon(oldEdge->geom);
@@ -603,7 +602,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         assert (iscw == ST_OrderingEquals(range, ST_ForceRHR(range)));
     }
     else {
-        assert (ST_Equals(ST_EndPoint(_geos, acurve), ST_EndPoint(_geos, oldEdge->geom)));
+        assert (ST_Equals(ST_EndPoint(acurve), ST_EndPoint(oldEdge->geom)));
     }
 
     /* below are just sanity checks, TODO later.
@@ -660,7 +659,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
             GEOSGeom r1 = NULL;
             GEOSGeom r2 = NULL;
 
-            if (!ST_IsEmpty(_geos, ns)) {
+            if (!ST_IsEmpty(ns)) {
                 assert (false);
                 /* implement only if necessary
                 tmp1 := ST_MakeLine(ST_EndPoint(oldedge.geom), ST_StartPoint(oldedge.geom));
@@ -908,8 +907,8 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
         if (ST_Contains(oldEdge->geom, point)) {
             double snaptol = _ST_MinTolerance(point);
             GEOSGeom snapedge = ST_Snap(oldEdge->geom, point, snaptol);
-            if (!ST_Equals(ST_StartPoint(_geos, oldEdge->geom), ST_StartPoint(_geos, snapedge))) {
-                snapedge = ST_MakeLine(ST_StartPoint(_geos, oldEdge->geom), snapedge);
+            if (!ST_Equals(ST_StartPoint(oldEdge->geom), ST_StartPoint(snapedge))) {
+                snapedge = ST_MakeLine(ST_StartPoint(oldEdge->geom), snapedge);
             }
 
             ST_ChangeEdgeGeom(oldEdge->id, snapedge);

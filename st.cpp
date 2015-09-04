@@ -41,9 +41,9 @@ bool ST_DWithin(const GEOSGeom g1, const GEOSGeom g2, double tolerance)
     return distance < tolerance;
 }
 
-bool ST_IsEmpty(GEOSContextHandle_t geos, const GEOSGeom geom)
+bool ST_IsEmpty(const GEOSGeom geom)
 {
-    return GEOSisEmpty_r(geos, geom) == 1;
+    return GEOSisEmpty_r(hdl, geom) == 1;
 }
 
 /**
@@ -94,10 +94,10 @@ double ST_Y(const GEOSGeom geom)
  * Mostly equivalent to the following function (postgis/lwgeom_functions_basic.c):
  *   Datum LWGEOM_azimuth(PG_FUNCTION_ARGS)
  */
-double ST_Azimuth(GEOSContextHandle_t geos, const GEOSGeometry* g1, const GEOSGeometry* g2)
+double ST_Azimuth(const GEOSGeometry* g1, const GEOSGeometry* g2)
 {
-    assert (g1 && GEOSGeomTypeId_r(geos, g1) == GEOS_POINT);
-    assert (g2 && GEOSGeomTypeId_r(geos, g2) == GEOS_POINT);
+    assert (g1 && GEOSGeomTypeId_r(hdl, g1) == GEOS_POINT);
+    assert (g2 && GEOSGeomTypeId_r(hdl, g2) == GEOS_POINT);
 
     LWGEOM* lwgeom1 = GEOS2LWGEOM(g1, 0);
     LWGEOM* lwgeom2 = GEOS2LWGEOM(g2, 0);
@@ -194,11 +194,11 @@ GEOSGeom ST_Split(const GEOSGeometry* in, const GEOSGeometry* blade_in)
     return ret;
 }
 
-GEOSGeom ST_PointN(GEOSContextHandle_t geos, const GEOSGeometry* line, int index)
+GEOSGeom ST_PointN(const GEOSGeometry* line, int index)
 {
-    assert (line && GEOSGeomTypeId_r(geos, line) == GEOS_LINESTRING);
-    assert (index >= 0 && index < GEOSGeomGetNumPoints_r(geos, line));
-    return GEOSGeomGetPointN_r(geos, line, index);
+    assert (line && GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
+    assert (index >= 0 && index < GEOSGeomGetNumPoints_r(hdl, line));
+    return GEOSGeomGetPointN_r(hdl, line, index);
 }
 
 GEOSGeom ST_Collect(GEOSGeometry* g1, GEOSGeometry* g2)
@@ -224,10 +224,10 @@ GEOSGeom ST_Reverse(const GEOSGeom geom)
     return ret;
 }
 
-GEOSGeom ST_EndPoint(GEOSContextHandle_t geos, const GEOSGeometry* geom)
+GEOSGeom ST_EndPoint(const GEOSGeometry* geom)
 {
-    assert (geom && GEOSGeomTypeId_r(geos, geom) == GEOS_LINESTRING);
-    return GEOSGeomGetEndPoint_r(geos, geom);
+    assert (geom && GEOSGeomTypeId_r(hdl, geom) == GEOS_LINESTRING);
+    return GEOSGeomGetEndPoint_r(hdl, geom);
 }
 
 GEOSGeom ST_Envelope(const GEOSGeom geom)
@@ -276,10 +276,10 @@ GEOSGeom ST_MakeLine(const GEOSGeom g1, const GEOSGeom g2)
  * Mostly equivalent to the following function (postgis/lwgeom_functions_basic.c):
  *   Datum LWGEOM_setpoint_linestring(PG_FUNCTION_ARGS)
  */
-GEOSGeom ST_SetPoint(GEOSContextHandle_t _geos, const GEOSGeometry* line, int index, const GEOSGeometry* point)
+GEOSGeom ST_SetPoint(const GEOSGeometry* line, int index, const GEOSGeometry* point)
 {
     assert (line && GEOSGeomTypeId(line) == GEOS_LINESTRING);
-    assert (index >= 0 && index < GEOSGeomGetNumPoints_r(_geos, line));
+    assert (index >= 0 && index < GEOSGeomGetNumPoints_r(hdl, line));
     assert (point && GEOSGeomTypeId(point) == GEOS_POINT);
 
     LWGEOM* lwgeom_line  = GEOS2LWGEOM(line, 0);
@@ -379,10 +379,10 @@ GEOSGeom ST_MakeValid(const GEOSGeometry* geom)
     return ret;
 }
 
-GEOSGeom ST_StartPoint(GEOSContextHandle_t geos, const GEOSGeometry* geom)
+GEOSGeom ST_StartPoint(const GEOSGeometry* geom)
 {
-    assert (geom && GEOSGeomTypeId_r(geos, geom) == GEOS_LINESTRING);
-    return GEOSGeomGetStartPoint_r(geos, geom);
+    assert (geom && GEOSGeomTypeId_r(hdl, geom) == GEOS_LINESTRING);
+    return GEOSGeomGetStartPoint_r(hdl, geom);
 }
 
 /**
@@ -426,18 +426,18 @@ GEOSGeom ST_ClosestPoint(const GEOSGeom g1, const GEOSGeom g2)
     return ret;
 }
 
-GEOSGeom ST_CollectionExtract(GEOSContextHandle_t _geos, const GEOSGeometry* geom, int type)
+GEOSGeom ST_CollectionExtract(const GEOSGeometry* geom, int type)
 {
     assert (type >= 1 && type <= 3);
     assert (GEOSGeomTypeId(geom) == GEOS_GEOMETRYCOLLECTION);
 
     vector<GEOSGeom> geoms;
-    for (int i = 0; i < GEOSGetNumGeometries_r(_geos, geom); ++i) {
-        geoms.push_back(GEOSGeom_clone_r(_geos, GEOSGetGeometryN_r(_geos, geom, i)));
+    for (int i = 0; i < GEOSGetNumGeometries_r(hdl, geom); ++i) {
+        geoms.push_back(GEOSGeom_clone_r(hdl, GEOSGetGeometryN_r(hdl, geom, i)));
     }
 
     return GEOSGeom_createCollection_r(
-        _geos,
+        hdl,
         GEOS_GEOMETRYCOLLECTION,
         geoms.data(),
         geoms.size()
