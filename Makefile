@@ -30,4 +30,4 @@ clean:
 distclean: clean
 
 run:
-	DYLD_LIBRARY_PATH=/opt/intel/composer_xe_2015.1.108/compiler/lib:/Users/laurent/Projets/CycleMapApp/postgis-2.1.8/liblwgeom/.libs mpirun -np 4 ./test
+	DYLD_LIBRARY_PATH=/opt/intel/compilers_and_libraries/mac/lib:/Users/laurent/Projets/CycleMapApp/postgis-2.1.8/liblwgeom/.libs ./$(program_NAME)
