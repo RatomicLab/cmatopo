@@ -1,6 +1,6 @@
 CXX := icpc
 
-program_NAME := test
+program_NAME := cmatopo
 program_SRCS := $(wildcard *.cpp)
 program_OBJS := ${program_SRCS:.cpp=.o}
 
@@ -12,6 +12,7 @@ CPPFLAGS = -openmp -O3 -std=c++11 `gdal-config --cflags`
 CPPFLAGS += $(foreach includedir,$(program_INCLUDE_DIRS),-I$(includedir))
 
 LDFLAGS = `gdal-config --libs`
+LDFLAGS += -lpq
 LDFLAGS += $(foreach librarydir,$(program_LIBRARY_DIRS),-L$(librarydir))
 LDFLAGS += $(foreach library,$(program_LIBRARIES),-l$(library))
 
