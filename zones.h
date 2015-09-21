@@ -22,6 +22,10 @@ void write_zones(const std::string& filename, const std::vector<zoneInfo*>& zone
  */
 GEOSGeometry* world_geom();
 
+/**
+ * Return a GEOS geometry reprensenting the provided OGR envelope.
+ * The resulting geometry must be freed by the caller (GEOSGeom_destroy_r).
+ */
 GEOSGeometry* OGREnvelope2GEOSGeom(const OGREnvelope& env);
 
 } // namespace cma

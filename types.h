@@ -13,7 +13,7 @@
 
 namespace cma {
 
-typedef std::vector<OGRGeometry *>  linesV;
+typedef std::vector<GEOSGeometry *> linesV;
 typedef std::pair<OGREnvelope, int> zoneInfo;
 
 class edge {

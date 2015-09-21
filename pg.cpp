@@ -1,9 +1,19 @@
 #include <pg.h>
 
+#include <cassert>
+#include <sstream>
 #include <iostream>
+
+#include <zones.h>
 
 using namespace cma;
 using namespace std;
+
+namespace cma {
+    extern GEOSContextHandle_t hdl;
+}
+
+namespace cma {
 
 PG::PG(const std::string& connect_str)
 {
@@ -49,3 +59,39 @@ bool PG::success(PGresult* res) const
     int status = PQresultStatus(res);
     return (status == PGRES_TUPLES_OK || status == PGRES_COMMAND_OK);
 }
+
+bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)
+{
+    GEOSGeometry* geom = OGREnvelope2GEOSGeom(envelope);
+    GEOSWKTWriter* wkt_writer = GEOSWKTWriter_create_r(hdl);
+
+    char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
+    ostringstream oss;
+    oss << "SELECT line2d FROM way WHERE ST_SetSRID('" << hex << "'::geometry, 4326) ~ line2d";
+    GEOSFree_r(hdl, hex);
+    GEOSWKTWriter_destroy_r(hdl, wkt_writer);
+
+    PGresult* res = query(oss.str().c_str());
+
+    if (!success(res)) {
+        PQclear(res);
+        return false;
+    }
+
+    char* line2d;
+    GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
+    for (int i = 0; i < PQntuples(res); i++) {
+        line2d = PQgetvalue(res, i, 0);
+        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 0));
+        assert (line != NULL);
+        lines.push_back(line);
+    }
+    GEOSWKBReader_destroy_r(hdl, wkb_reader);
+
+    PQclear(res);
+    GEOSGeom_destroy_r(hdl, geom);
+
+    return true;
+}
+
+} // namespace cma

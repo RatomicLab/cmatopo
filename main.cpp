@@ -7,6 +7,7 @@
 #include <pg.h>
 #include <utils.h>
 #include <zones.h>
+#include <topology.h>
 
 using namespace cma;
 using namespace std;
@@ -37,7 +38,56 @@ int main(int argc, char **argv)
     std::vector<zoneInfo*> zones;
     prepare_zones(db, geos, world_extent, zones, 10);
     GEOSGeom_destroy_r(hdl, world_extent);
-    write_zones("output/test.shp", zones, true);
+    // write_zones("output/test.shp", zones, true);
+
+    Topology* topology = new Topology();
+
+    for (zoneInfo* zone : zones) {
+        if (zone->second == 0) {
+            continue;
+        }
+
+        linesV lines;
+        if (!db.get_lines_within(zone->first, lines)) {
+            assert (false);
+        }
+
+        assert (lines.size() > 0);
+
+        for (GEOSGeometry* line : lines) {
+            vector<int> edgeIds;
+            topology->TopoGeo_AddLineString(line, edgeIds);
+        }
+    }
+
+    delete topology;
 
     return 0;
+
+    int count = 0;
+    PGresult* res = db.query("SELECT line from way;", true);
+    while (res != NULL && !PQgetisnull(res, 0, 0)) {
+        ++count;
+
+        char* line = PQgetvalue(res, 0, 0);
+
+        GEOSGeometry* geom = GEOSWKBReader_readHEX_r(hdl, wkbr, (unsigned char*)line, strlen(line));
+        if (!geom) {
+            cerr << "Invalid geometry received." << endl;
+            return 1;
+        }
+
+        if (GEOSGeomTypeId_r(hdl, geom) != GEOS_LINESTRING) {
+            char* geom_type = GEOSGeomType_r(hdl, geom);
+            cerr << "Skipping invalid geometry of type " << geom_type << endl;
+            GEOSFree_r(hdl, geom_type);
+        }
+
+        GEOSGeom_destroy_r(hdl, geom);
+
+        PQclear(res);
+        res = db.next_result();
+    }
+
+    cout << count << endl;
 }
