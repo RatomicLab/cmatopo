@@ -13,8 +13,8 @@
 
 namespace cma {
 
-typedef std::vector<OGRGeometry *>     linesV;
-typedef std::pair<OGREnvelope, linesV> zoneInfo;
+typedef std::vector<OGRGeometry *>  linesV;
+typedef std::pair<OGREnvelope, int> zoneInfo;
 
 class edge {
   public:
@@ -72,7 +72,7 @@ typedef struct {
 
 inline void sort_zones_by_line_count(std::vector<zoneInfo*>& zones, bool reverse_sort=false) {
     std::sort(zones.begin(), zones.end(), [](zoneInfo* a, zoneInfo* b) {
-        return a->second.size() < b->second.size();
+        return a < b;
     });
     if (reverse_sort) {
         reverse(zones.begin(), zones.end());

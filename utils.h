@@ -5,8 +5,43 @@
 
 namespace cma {
 
+extern GEOSContextHandle_t hdl;
+
 int get_nb_threads();
-void geos_message_function(const char *fmt, ...); 
+void geos_message_function(const char *fmt, ...);
+
+class GEOSHelper
+{
+public:
+    GEOSHelper() {
+        hdl = initGEOS_r(geos_message_function, geos_message_function);
+        if (hdl) {
+            wkbr = GEOSWKBReader_create_r(hdl);
+            wkbw = GEOSWKBWriter_create_r(hdl);
+        }
+    }
+    ~GEOSHelper() {
+        if (wkbr) {
+            GEOSWKBReader_destroy_r(hdl, wkbr);
+        }
+        if (wkbw) {
+            GEOSWKBWriter_destroy_r(hdl, wkbw);
+        }
+        finishGEOS_r(hdl);
+    }
+
+    GEOSWKBReader* reader() {
+        return wkbr;
+    }
+
+    GEOSWKBWriter* writer() {
+        return wkbw;
+    }
+
+private:
+    GEOSWKBReader* wkbr = NULL;
+    GEOSWKBWriter* wkbw = NULL;
+};
 
 } // namespace cma
 
