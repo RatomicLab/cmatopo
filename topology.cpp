@@ -123,7 +123,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
             }
         }
 
-        if (edgeId == NULLint) {
+        if (_is_null(edgeId)) {
             edgeIds.push_back(ST_AddEdgeModFace(start_node, end_node, snapped));
         }
         else {
@@ -168,9 +168,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     GEOSGeom_destroy_r(hdl, end_point);
     GEOSGeom_destroy_r(hdl, next_to_last_point);
 
-    int nodes[] = {start_node, end_node};
-    int i = 0;
-    for (; i < 2; ++i) {
+    for (int i = 0; i < 2; ++i) {
         node* n = i == 0 ? _nodes[start_node] : _nodes[end_node];
 
         if (!_is_null(n->containing_face)) {
