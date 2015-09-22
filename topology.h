@@ -33,7 +33,10 @@ public:
     template <class T>
     void delete_all(std::vector<T*>& v);
 
-    void TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance=-1.);
+    /**
+     * Add an edge (and it's endpoints) to the topology.
+     */
+    void TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance=0.);
     int ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom);
 
     /*****************/
