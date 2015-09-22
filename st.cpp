@@ -159,19 +159,17 @@ double _ST_MinTolerance(const GEOSGeom geom)
  */
 GEOSGeom ST_Snap(const GEOSGeom g1, const GEOSGeom g2, double tolerance)
 {
-    LWGEOM* lwresult;
-    LWGEOM* lwgeom1 = GEOS2LWGEOM(g1, 0);
-    LWGEOM* lwgeom2 = GEOS2LWGEOM(g2, 0);
+    assert (g1 && g2);
 
-    lwresult = lwgeom_snap(lwgeom1, lwgeom2, tolerance);
+    int srid = GEOSGetSRID_r(hdl, g1);
 
-    GEOSGeom ret = LWGEOM2GEOS(lwresult);
+    GEOSGeometry* g3 = GEOSSnap_r(hdl, g1, g2, tolerance);
 
-    lwgeom_free(lwresult);
-    lwgeom_free(lwgeom1);
-    lwgeom_free(lwgeom2);
+    if (g3) {
+        GEOSSetSRID_r(hdl, g3, srid);
+    }
 
-    return ret;
+    return g3;
 }
 
 /**
