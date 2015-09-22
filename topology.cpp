@@ -28,7 +28,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 {
     assert (GEOSGeomTypeId(line) == GEOS_LINESTRING);
 
-    if (tolerance < 0) {
+    if (tolerance <= 0) {
         tolerance = _ST_MinTolerance(line);
     }
 
@@ -52,6 +52,17 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 
     nearby.clear();
 
+    if (iedges && GEOSisEmpty_r(hdl, iedges) == 0) {
+        GEOSGeometry* snapped = ST_Snap(noded, iedges, tolerance);
+
+        noded = GEOSDifference_r(hdl, snapped, iedges);
+
+        GEOSGeometry* set1 = GEOSIntersection_r(hdl, snapped, iedges);
+        GEOSGeometry* set2 = GEOSLineMerge_r(hdl, set1);
+
+        noded = GEOSUnion_r(hdl, noded, set2);
+    }
+
     // 2.1 Node with existing nodes within tolerance
     for (node* n : _nodes) {
         if (ST_DWithin(n->geom, noded, tolerance)) {
@@ -68,7 +79,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 
     nearby.clear();
 
-    if (inodes && !GEOSisEmpty_r(hdl, inodes)) {
+    if (inodes && GEOSisEmpty_r(hdl, inodes) == 0) {
         noded = ST_Snap(noded, inodes, tolerance);
 
         int nbNodes = GEOSGetNumGeometries_r(hdl, inodes);
@@ -104,7 +115,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
             continue;
         }
 
-        int edgeId = -1;
+        int edgeId = NULLint;
         for (edge* e : _edges) {
             if (ST_Equals(e->geom, snapped)) {
                 edgeId = e->id;
@@ -112,7 +123,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
             }
         }
 
-        if (edgeId == -1) {
+        if (edgeId == NULLint) {
             edgeIds.push_back(ST_AddEdgeModFace(start_node, end_node, snapped));
         }
         else {
