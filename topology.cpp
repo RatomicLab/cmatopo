@@ -384,7 +384,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
             g = ST_Reverse(g);
         }
         else {
-            GEOSGeom_clone_r(hdl, g);
+            g = GEOSGeom_clone_r(hdl, g);
         }
         geometries.push_back(g);
     }
@@ -403,7 +403,9 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         0
     );
 
-    bool isccw = GEOSEqualsExact_r(hdl, shell, ST_ForceRHR(shell), 0.) == 0;
+    GEOSGeometry* forceRHR = ST_ForceRHR(shell);
+    bool isccw = GEOSEqualsExact_r(hdl, shell, forceRHR, 0.) == 0;
+    GEOSGeom_destroy_r(hdl, forceRHR);
 
     if (faceId == 0 && !isccw) {
         return NULLint;
@@ -413,6 +415,8 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         if (isccw) {
             _faces[faceId]->mbr = GEOSEnvelope_r(hdl, shell);
         }
+
+        GEOSGeom_destroy_r(hdl, shell);
         return NULLint;
     }
 
@@ -428,10 +432,11 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
 
     for (int id : newRingEdges) {
         edge* e = _edges[abs(id)];
-        if (e->left_face == faceId) {
+
+        if (id > 0 && e->left_face == faceId) {
             e->left_face = newFace->id;
         }
-        if (e->right_face == faceId) {
+        else if (id < 0 && e->right_face == faceId) {
             e->right_face = newFace->id;
         }
     }
@@ -447,6 +452,8 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
             !_is_in(e->id, absNewRingEdges))
         {
             GEOSGeom closestPoint = GEOSInterpolate_r(hdl, e->geom, 0.2);
+            // TODO: check for bounding box intersection before ST_Contains to
+            // speed things up.
             bool c = ST_Contains(shell, closestPoint);
             GEOSGeom_destroy_r(hdl, closestPoint);
 
@@ -474,6 +481,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         }
     }
 
+    GEOSGeom_destroy_r(hdl, shell);
     return newFace->id;
 }
 
