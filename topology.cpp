@@ -14,6 +14,7 @@ Topology::Topology()
 : _nodes()
 , _edges()
 , _faces()
+, _relations()
 {
 }
 
@@ -22,6 +23,7 @@ Topology::~Topology()
     delete_all(_nodes);
     delete_all(_edges);
     delete_all(_faces);
+    delete_all(_relations);
 }
 
 void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance)
@@ -347,39 +349,14 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     }
 
     if (newEdge->left_face != 0) {
-        // TODO: update topo
-        /*
-      --------------------------------------------
-      -- Update topogeometries, if needed
-      --------------------------------------------
-
-        -- NOT IN THE SPECS:
-        -- update TopoGeometry compositions to add newface
-        sql := 'SELECT r.topogeo_id, r.layer_id FROM '
-          || quote_ident(atopology)
-          || '.relation r, topology.layer l '
-          || ' WHERE l.topology_id = ' || topoid
-          || ' AND l.level = 0 '
-          || ' AND l.layer_id = r.layer_id '
-          || ' AND r.element_id = ' || newedge.left_face
-          || ' AND r.element_type = 3 ';
-        --RAISE DEBUG 'SQL: %', sql;
-        FOR rec IN EXECUTE sql
-        LOOP
-    #ifdef POSTGIS_TOPOLOGY_DEBUG
-          RAISE DEBUG 'TopoGeometry % in layer % contained the face being split (%) - updating to contain also new face %', rec.topogeo_id, rec.layer_id, newedge.left_face, newface;
-    #endif
-
-          -- Add reference to the other face
-          sql := 'INSERT INTO ' || quote_ident(atopology)
-            || '.relation VALUES( ' || rec.topogeo_id
-            || ',' || rec.layer_id || ',' || newface || ', 3)';
-          --RAISE DEBUG 'SQL: %', sql;
-          EXECUTE sql;
-
-        END LOOP;
-
-        */
+        for (relation* rel : _relations) {
+            if (rel->element_id == newEdge->left_face && rel->element_id == 3) {
+                relation* nrel = new relation();
+                nrel->element_id = newFaceId;
+                nrel->element_type = 3;
+                _relations.push_back(nrel);
+            }
+        }
     }
 
     return newEdge->id;

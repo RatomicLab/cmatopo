@@ -63,6 +63,7 @@ private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
     std::vector<face*> _faces;
+    std::vector<relation*> _relations;
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;
