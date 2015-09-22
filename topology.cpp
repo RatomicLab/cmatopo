@@ -186,19 +186,26 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     GEOSGeom end_node_geom = _nodes[end_node]->geom;
 
     assert (start_node_geom);
-    // assert (ST_Equals(start_node_geom, ST_StartPoint(geom)));
+    assert (ST_Equals(start_node_geom, ST_StartPoint(geom)));
     assert (end_node_geom);
-    // assert (ST_Equals(end_node_geom, ST_EndPoint(geom)));
+    assert (ST_Equals(end_node_geom, ST_EndPoint(geom)));
 
     for (node* n : _nodes) {
-        assert (GEOSRelatePattern_r(hdl, n->geom, geom, "T********") == 0);
+        // TODO: to speed things up, check if bounding box of n->geom and geom intersects
+        // before checking for the related pattern. (postgis && operator)
+        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
+        assert (relate);
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
+        GEOSFree_r(hdl, relate);
     }
 
     for (edge* e : _edges) {
-        char* relate = GEOSRelate_r(hdl, e->geom, geom);
-        assert (relate != NULL);
+        // TODO: to speed things up, check if bounding box of e->geom and geom intersects
+        // before checking for the related pattern. (postgis && operator)
+        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
+        assert (relate);
         if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
-            GEOSFree(relate);
+            GEOSFree_r(hdl, relate);
             continue;
         }
 
@@ -206,7 +213,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
         assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
 
-        GEOSFree(relate);
+        GEOSFree_r(hdl, relate);
     }
 
     vector<edge*> edgesToStartNode;
