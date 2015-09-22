@@ -225,27 +225,29 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
         if (e->start_node == start_node || e->end_node == start_node) {
             ne = new edge(e);
-            ne->end_node = -1;
+            ne->start_node = e->end_node == start_node ? -1 : ne->start_node;
+            ne->end_node = e->start_node == start_node ? -1 : ne->end_node;
             g = ne->geom;
             ne->geom = ST_RemoveRepeatedPoints(g);
             edgesToStartNode.push_back(ne);
         }
 
         if (g) {
-            GEOSGeom_destroy(g);
+            GEOSGeom_destroy_r(hdl, g);
             g = NULL;
         }
 
         if (e->start_node == end_node || e->end_node == end_node) {
             ne = new edge(e);
-            ne->start_node = -1;
+            ne->start_node = e->end_node == end_node ? -1 : ne->start_node;
+            ne->end_node = e->start_node == end_node ? -1 : ne->end_node;
             g = ne->geom;
             ne->geom = ST_RemoveRepeatedPoints(g);
             edgesToEndNode.push_back(ne);
         }
 
         if (g) {
-            GEOSGeom_destroy(g);
+            GEOSGeom_destroy_r(hdl, g);
         }
     }
 
@@ -559,7 +561,7 @@ void Topology::_find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_
         assert (!_is_null(az));
 
         az -= span.myaz;
-        if (az < 0) {
+        if (az < 0.) {
             az += 2*M_PI;
         }
 
