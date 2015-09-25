@@ -341,13 +341,14 @@ GEOSGeom ST_BuildArea(const GEOSGeom geom)
     lwgeom_out = lwgeom_buildarea(lwgeom_in);
 
     if (!lwgeom_out) {
+        lwgeom_free(lwgeom_in);
         return NULL;
     }
 
     GEOSGeom ret = LWGEOM2GEOS(lwgeom_out);
 
-    lwgeom_free(lwgeom_in) ;
-    lwgeom_free(lwgeom_out) ;
+    lwgeom_free(lwgeom_in);
+    lwgeom_free(lwgeom_out);
 
     return ret;
 }
