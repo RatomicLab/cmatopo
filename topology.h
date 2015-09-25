@@ -41,7 +41,7 @@ public:
 
     /*****************/
 
-    int TopoGeo_AddPoint(GEOSGeom point, double tolerance);
+    int TopoGeo_AddPoint(GEOSGeom point, double tolerance=0.);
 
     const node* get_node_at(double x, double y) {
         for (node* n : _nodes) {

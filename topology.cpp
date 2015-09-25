@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cassert>
+#include <stdexcept>
 #include <algorithm>
 
 #include <st.h>
@@ -926,6 +927,13 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
  */
 int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
 {
+    assert (geom);
+    assert (GEOSGeomTypeId_r(hdl, geom) == GEOS_POINT);
+
+    if (tolerance == 0.) {
+        tolerance = _ST_MinTolerance(geom);
+    }
+
     const node* oldNode = closest_and_within(geom, _nodes, tolerance);
     if (oldNode) {
         return oldNode->id;
@@ -936,28 +944,33 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
     const edge* oldEdge = closest_and_within(geom, _edges, tolerance);
     if (oldEdge) {
         GEOSGeom point = ST_ClosestPoint(geom, oldEdge->geom);
-        if (ST_Contains(oldEdge->geom, point)) {
+
+        if (!ST_Contains(oldEdge->geom, point)) {
             double snaptol = _ST_MinTolerance(point);
+
             GEOSGeom snapedge = ST_Snap(oldEdge->geom, point, snaptol);
-            if (!ST_Equals(ST_StartPoint(oldEdge->geom), ST_StartPoint(snapedge))) {
-                snapedge = ST_MakeLine(ST_StartPoint(oldEdge->geom), snapedge);
+            GEOSGeom sp = ST_StartPoint(oldEdge->geom);
+            GEOSGeom ep = ST_StartPoint(snapedge);
+
+            if (!ST_Equals(sp, ep)) {
+                GEOSGeom_destroy_r(hdl, sp);
+                sp = ST_StartPoint(oldEdge->geom);
+                snapedge = ST_MakeLine(sp, snapedge);
             }
 
             ST_ChangeEdgeGeom(oldEdge->id, snapedge);
+
+            GEOSGeom_destroy_r(hdl, sp);
+            GEOSGeom_destroy_r(hdl, ep);
+            GEOSGeom_destroy_r(hdl, snapedge);
         }
 
         id = ST_ModEdgeSplit(oldEdge->id, point);
+
+        GEOSGeom_destroy_r(hdl, point);
     }
     else {
-        // below: AddIsoNode. TODO needs review
-        node* newNode = new node;
-        newNode->id = _nodes.size();
-        newNode->geom = geom;
-        _nodes.push_back(newNode);
-
-        id = newNode->id;
-
-        //id := topology.ST_AddIsoNode(atopology, NULL, apoint);
+        id = ST_AddIsoNode(geom);
     }
 
     assert (id != -1);
