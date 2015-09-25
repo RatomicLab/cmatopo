@@ -588,24 +588,43 @@ void Topology::_find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_
  */
 int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 {
-    assert (edgeId >= 0 && edgeId < _edges.size());
+    assert (!_is_null(edgeId) && edgeId < _edges.size());
     assert (acurve != NULL);
+    assert (GEOSGeomTypeId_r(hdl, acurve) == GEOS_LINESTRING);
+    assert (GEOSisSimple_r(hdl, acurve) == 1);
 
     edge* oldEdge = _edges[edgeId];
-    assert (oldEdge);
 
-    assert (ST_Equals(ST_StartPoint(acurve), ST_StartPoint(oldEdge->geom)));
+    GEOSGeometry* sp1 = ST_StartPoint(acurve);
+    GEOSGeometry* sp2 = ST_StartPoint(oldEdge->geom);
+    assert (ST_Equals(sp1, sp2));
+    GEOSGeom_destroy_r(hdl, sp1);
+    GEOSGeom_destroy_r(hdl, sp2);
 
     if (oldEdge->start_node == oldEdge->end_node) {
         GEOSGeom range = ST_MakePolygon(oldEdge->geom);
-        bool iscw = ST_OrderingEquals(range, ST_ForceRHR(range));
 
-        assert (ST_NPoints(ST_RemoveRepeatedPoints(acurve)) >= 3);
+        GEOSGeometry* forceRHR = ST_ForceRHR(range);
+        bool iscw = ST_OrderingEquals(range, forceRHR);
+        GEOSGeom_destroy_r(hdl, forceRHR);
+
+        GEOSGeometry* g = ST_RemoveRepeatedPoints(acurve);
+        assert (GEOSGeomGetNumPoints_r(hdl, g) >= 3);
+        GEOSGeom_destroy_r(hdl, g);
+
+        GEOSGeom_destroy_r(hdl, range);
+
         range = ST_MakePolygon(acurve);
-        assert (iscw == ST_OrderingEquals(range, ST_ForceRHR(range)));
+        forceRHR = ST_ForceRHR(range);
+        assert (iscw == ST_OrderingEquals(range, forceRHR));
+        GEOSGeom_destroy_r(hdl, forceRHR);
     }
     else {
-        assert (ST_Equals(ST_EndPoint(acurve), ST_EndPoint(oldEdge->geom)));
+        GEOSGeometry* ep1 = ST_EndPoint(acurve);
+        GEOSGeometry* ep2 = ST_EndPoint(oldEdge->geom);
+        assert (ST_Equals(ep1, ep2));
+        GEOSGeom_destroy_r(hdl, ep1);
+        GEOSGeom_destroy_r(hdl, ep2);
     }
 
     /* below are just sanity checks, TODO later.
@@ -655,123 +674,115 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
   END LOOP; -- }
     */
 
+    vector<GEOSGeometry*> rng_info;
+
+    GEOSGeom coll = ST_Collect(ST_Envelope(oldEdge->geom), ST_Envelope(acurve));
     for (node* n : _nodes) {
-        GEOSGeom coll = ST_Collect(ST_Envelope(oldEdge->geom), ST_Envelope(acurve));
-        if (coll && n->id != oldEdge->start_node && n->id != oldEdge->end_node) {
-            GEOSGeom ns = ST_Collect(n->geom);
-            GEOSGeom r1 = NULL;
-            GEOSGeom r2 = NULL;
-
-            if (!ST_IsEmpty(ns)) {
-                assert (false);
-                /* implement only if necessary
-                tmp1 := ST_MakeLine(ST_EndPoint(oldedge.geom), ST_StartPoint(oldedge.geom));
-
-                rng_info.r1 := ST_MakeLine(oldedge.geom, tmp1);
-                IF ST_NumPoints(rng_info.r1) < 4 THEN
-                  rng_info.r1 := ST_AddPoint(rng_info.r1, ST_StartPoint(oldedge.geom));
-                END IF;
-                rng_info.r1 := ST_CollectionExtract(
-                                   ST_MakeValid(ST_MakePolygon(rng_info.r1)), 3);
-
-                rng_info.r2 := ST_MakeLine(acurve, tmp1);
-                IF ST_NumPoints(rng_info.r2) < 4 THEN
-                  rng_info.r2 := ST_AddPoint(rng_info.r2, ST_StartPoint(oldedge.geom));
-                END IF;
-                rng_info.r2 := ST_CollectionExtract(
-                                   ST_MakeValid(ST_MakePolygon(rng_info.r2)), 3);
-
-                FOR rec IN WITH
-                  nodes AS ( SELECT * FROM ST_Dump(rng_info.nodes) ),
-                  inr1 AS ( SELECT path[1] FROM nodes WHERE ST_Contains(rng_info.r1, geom) ),
-                  inr2 AS ( SELECT path[1] FROM nodes WHERE ST_Contains(rng_info.r2, geom) )
-                  ( SELECT * FROM inr1
-                      EXCEPT
-                    SELECT * FROM inr2
-                  ) UNION
-                  ( SELECT * FROM inr2
-                      EXCEPT
-                    SELECT * FROM inr1
-                  )
-                LOOP
-                  RAISE EXCEPTION 'Edge motion collision at %',
-                                 ST_AsText(ST_GeometryN(rng_info.nodes, rec.path));
-                END LOOP;
-                */
-             }
+        // TODO: to speed things up, check if bounding box of n->geom and coll intersects
+        if (n->id != oldEdge->start_node && n->id != oldEdge->end_node) {
+            rng_info.push_back(n->geom);
         }
     }
 
-/*
+    if (rng_info.size() > 0) {
+        GEOSGeometry* nodes = GEOSGeom_createCollection_r(
+            hdl,
+            GEOS_MULTILINESTRING,
+            rng_info.data(),
+            rng_info.size()
+        );
 
-  --
-  -- Check edge adjacency before
-  --{
+        GEOSGeometry* ep = ST_EndPoint(oldEdge->geom);
+        GEOSGeometry* sp = ST_StartPoint(oldEdge->geom);
+        GEOSGeometry* tmp1 = ST_MakeLine(ep, sp);
+        GEOSGeom_destroy_r(hdl, ep);
 
-  SELECT topology._ST_AdjacentEdges(
-      atopology, oldedge.start_node, anedge
-    ) as pre, NULL::integer[] as post
-  INTO STRICT snode_info;
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Bs:%', snode_info.pre;
-#endif
+        GEOSGeometry* r1 = ST_MakeLine(oldEdge->geom, tmp1);
 
-  SELECT topology._ST_AdjacentEdges(
-      atopology, oldedge.end_node, -anedge
-    ) as pre, NULL::integer[] as post
-  INTO STRICT enode_info;
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Be:%', enode_info.pre;
-#endif
+        if (GEOSGeomGetNumPoints_r(hdl, r1) < 4) {
+            GEOSGeometry* g = r1;
+            r1 = ST_AddPoint(r1, sp);
+            GEOSGeom_destroy_r(hdl, g);
+        }
 
-  --}
-    */
+        GEOSGeometry* g = r1;
+        r1 = ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(r1)), 3);
+        GEOSGeom_destroy_r(hdl, g);
 
+        GEOSGeometry* r2 = ST_MakeLine(acurve, tmp1);
+        if (GEOSGeomGetNumPoints_r(hdl, r2) < 4) {
+            g = r2;
+            r2 = ST_AddPoint(r2, sp);
+            GEOSGeom_destroy_r(hdl, g);
+        }
+
+        g = r2;
+        r2 = ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(r2)), 3);
+        GEOSGeom_destroy_r(hdl, g);
+
+        /**
+        FOR rec IN WITH
+          nodes AS ( SELECT * FROM ST_Dump(rng_info.nodes) ),
+          inr1 AS ( SELECT path[1] FROM nodes WHERE ST_Contains(rng_info.r1, geom) ),
+          inr2 AS ( SELECT path[1] FROM nodes WHERE ST_Contains(rng_info.r2, geom) )
+          ( SELECT * FROM inr1
+              EXCEPT
+            SELECT * FROM inr2
+          ) UNION
+          ( SELECT * FROM inr2
+              EXCEPT
+            SELECT * FROM inr1
+          )
+        LOOP
+          RAISE EXCEPTION 'Edge motion collision at %',
+                         ST_AsText(ST_GeometryN(rng_info.nodes, rec.path));
+        END LOOP;
+        */
+
+        GEOSGeom_destroy_r(hdl, tmp1);
+        GEOSGeom_destroy_r(hdl, sp);
+    }
+
+    GEOSGeom_destroy_r(hdl, coll);
+
+    vector<int> preStartEdgeIds;
+    vector<int> preEndEdgeIds;
+    _ST_AdjacentEdges(edgeId, edgeId, preStartEdgeIds);
+    _ST_AdjacentEdges(edgeId, edgeId, preEndEdgeIds);
+
+    GEOSGeometry* g = _edges[edgeId]->geom;
     _edges[edgeId]->geom = acurve;
+    if (g) {
+        GEOSGeom_destroy_r(hdl, g);
+    }
 
-    /*
-  --
-  -- Check edge adjacency after
-  --{
+    vector<int> postStartEdgeIds;
+    vector<int> postEndEdgeIds;
+    _ST_AdjacentEdges(edgeId, edgeId, postStartEdgeIds);
+    _ST_AdjacentEdges(edgeId, edgeId, postEndEdgeIds);
 
-  snode_info.post := topology._ST_AdjacentEdges(
-      atopology, oldedge.start_node, anedge
-    );
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'As:%', snode_info.post;
-#endif
-
-  enode_info.post := topology._ST_AdjacentEdges(
-      atopology, oldedge.end_node, -anedge
-    );
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Ae:%', enode_info.post;
-#endif
-
-  IF snode_info.pre != snode_info.post THEN
-    RAISE EXCEPTION 'Edge changed disposition around start node %',
-      oldedge.start_node;
-  END IF;
-
-  IF enode_info.pre != enode_info.post THEN
-    RAISE EXCEPTION 'Edge changed disposition around end node %',
-      oldedge.end_node;
-  END IF;
-
-  --}
-    */
+    assert (preStartEdgeIds == postStartEdgeIds);
+    assert (preEndEdgeIds == postEndEdgeIds);
 
     if (oldEdge->left_face != 0) {
         for (face* f : _faces) {
             if (f->id == oldEdge->left_face) {
+                g = f->mbr;
                 f->mbr = ST_Envelope(ST_GetFaceGeometry(oldEdge->left_face));
+                if (g) {
+                    GEOSGeom_destroy_r(hdl, g);
+                }
             }
         }
     }
     if (oldEdge->right_face != 0 && oldEdge->right_face != oldEdge->left_face) {
         for (face* f : _faces) {
             if (f->id == oldEdge->right_face) {
+                g = f->mbr;
                 f->mbr = ST_Envelope(ST_GetFaceGeometry(oldEdge->right_face));
+                if (g) {
+                    GEOSGeom_destroy_r(hdl, g);
+                }
             }
         }
     }
