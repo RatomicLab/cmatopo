@@ -461,7 +461,9 @@ GEOSGeom ST_CollectionExtract(const GEOSGeometry* geom, int type)
 
     vector<GEOSGeom> geoms;
     for (int i = 0; i < GEOSGetNumGeometries_r(hdl, geom); ++i) {
-        geoms.push_back(GEOSGeom_clone_r(hdl, GEOSGetGeometryN_r(hdl, geom, i)));
+        if (GEOSGeomTypeId_r(hdl, GEOSGetGeometryN_r(hdl, geom, i)) == type) {
+            geoms.push_back(GEOSGeom_clone_r(hdl, GEOSGetGeometryN_r(hdl, geom, i)));
+        }
     }
 
     return GEOSGeom_createCollection_r(
