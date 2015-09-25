@@ -206,7 +206,7 @@ GEOSGeom ST_Collect(GEOSGeometry* g1, GEOSGeometry* g2)
     // After this point, g1 and g2 should not be freed.
     // Only the created collection should.
 
-    return GEOSGeom_createCollection(GEOS_GEOMETRYCOLLECTION, geoms, g2 == NULL ? 1 : 2);
+    return GEOSGeom_createCollection_r(hdl, GEOS_GEOMETRYCOLLECTION, geoms, g2 == NULL ? 1 : 2);
 }
 
 /**
@@ -230,7 +230,7 @@ GEOSGeom ST_EndPoint(const GEOSGeometry* geom)
 
 GEOSGeom ST_Envelope(const GEOSGeom geom)
 {
-    return GEOSEnvelope(geom);
+    return GEOSEnvelope_r(hdl, geom);
 }
 
 /**
