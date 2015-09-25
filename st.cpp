@@ -222,6 +222,36 @@ GEOSGeom ST_Reverse(const GEOSGeom geom)
     return ret;
 }
 
+GEOSGeom ST_AddPoint(GEOSGeometry* line, GEOSGeometry* point, int where)
+{
+    assert (line);
+    assert (point);
+    assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
+    assert (GEOSGeomTypeId_r(hdl, point) == GEOS_POINT);
+    assert (where >= -1);
+
+    LWGEOM* lwgeom_line = GEOS2LWGEOM(line, 0);
+    LWGEOM* lwgeom_point = GEOS2LWGEOM(point, 0);
+
+    LWLINE* lwline = lwgeom_as_lwline(lwgeom_line);
+    LWPOINT* lwpoint = lwgeom_as_lwpoint(lwgeom_point);
+
+    if (where == -1) {
+        where = lwline->points->npoints;
+    }
+
+    LWLINE* linecopy = lwgeom_as_lwline(lwgeom_clone_deep(lwgeom_line));
+    lwline_add_lwpoint(linecopy, lwpoint, where);
+
+    GEOSGeometry* ret = LWGEOM2GEOS(lwline_as_lwgeom(linecopy));
+
+    lwline_free(linecopy);
+    lwgeom_free(lwgeom_line);
+    lwgeom_free(lwgeom_point);
+
+    return ret;
+}
+
 GEOSGeom ST_EndPoint(const GEOSGeometry* geom)
 {
     assert (geom && GEOSGeomTypeId_r(hdl, geom) == GEOS_LINESTRING);
