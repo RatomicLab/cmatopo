@@ -967,13 +967,44 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
 /**
  * Mostly equivalent to the following function (topology/sql/sqlmm.sql.in):
  *   FUNCTION topology.ST_AddIsoNode(atopology varchar, aface integer, apoint geometry)
+ * Most code pertaining to faces was not ported as we don't need it (yet).
  */
 int Topology::ST_AddIsoNode(const GEOSGeom point)
 {
     assert (point != NULL);
-    assert (GEOSGeomTypeId(point) == GEOS_POINT);
+    assert (GEOSGeomTypeId_r(hdl, point) == GEOS_POINT);
 
-    // TODO
+    for (node* n : _nodes) {
+        if (ST_Equals(n->geom, point)) {
+            throw invalid_argument("SQL/MM Spatial exception - coincident node");
+        }
+    }
+
+    for (edge* e : _edges) {
+        if (GEOSIntersects_r(hdl, e->geom, point) == 1) {
+            throw invalid_argument("SQL/MM Spatial exception - edge crosses node.");
+        }
+    }
+
+    int containing_face = NULLint;
+    for (face* f : _faces) {
+        // TODO: check if the bounding box of f->mbr contains point
+        if (f->id > 0 && /* here && */ ST_Contains(ST_GetFaceGeometry(f->id), point)) {
+            containing_face = f->id;
+            break;
+        }
+    }
+
+    if (_is_null(containing_face)) {
+        containing_face = 0;
+    }
+
+    node* newNode = new node;
+    newNode->id = _nodes.size();
+    newNode->geom = point;
+    _nodes.push_back(newNode);
+
+    return newNode->id;
 }
 
 } // namespace cma
