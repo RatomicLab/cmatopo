@@ -45,6 +45,7 @@ public:
 
     const node* get_node_at(double x, double y) {
         for (node* n : _nodes) {
+            // TODO: speedup by testing if n->geom bounding box contains the point POINT(x,y)
             if (ST_X(n->geom) == x && ST_Y(n->geom) == y) {
                 return n;
             }

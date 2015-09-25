@@ -801,7 +801,7 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
 
     edge* oldEdge = _edges[edgeId];
     assert (oldEdge);
-    assert (GEOSWithin(point, oldEdge->geom) == 1);
+    assert (GEOSWithin_r(hdl, point, oldEdge->geom) == 1);
 
     const node* coincidentNode = get_node_at(ST_X(point), ST_Y(point));
     assert (!coincidentNode);
@@ -811,9 +811,14 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
     newNode->geom = point;
     _nodes.push_back(newNode);
 
+    GEOSGeometry* tmp;
+
     GEOSGeom newedge2 = ST_Split(oldEdge->geom, point);
     GEOSGeom newedge1 = ST_GeometryN(newedge2, 0);
+
+    tmp = newedge2;
     newedge2 = ST_GeometryN(newedge2, 1);
+    GEOSGeom_destroy_r(hdl, tmp);
 
     assert (newedge1 && newedge2);
 
@@ -828,7 +833,9 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
     newEdge->geom = newedge2;
     _edges.push_back(newEdge);
 
+    tmp = newedge1;
     oldEdge->geom = newedge1;
+    GEOSGeom_destroy_r(hdl, tmp);
     oldEdge->next_left_edge = newEdge->id;
     oldEdge->abs_next_left_edge = newEdge->id;
     oldEdge->end_node = newNode->id;
@@ -846,7 +853,14 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
         }
     }
 
-    // TODO: update way_topo relation table
+    for (relation* r : _relations) {
+        if (abs(r->element_id) == edgeId && r->element_type == 2) {
+            relation* nrel = new relation;
+            nrel->element_id = r->element_id < 0 ? -newEdge->id : newEdge->id;
+            nrel->element_type = r->element_type;
+            _relations.push_back(nrel);
+        }
+    }
 
     return newNode->id;
 }
