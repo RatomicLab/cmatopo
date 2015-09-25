@@ -907,14 +907,18 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
             geoms.push_back(e->geom);
         }
     }
-    GEOSGeom coll = GEOSGeom_createCollection(GEOS_MULTILINESTRING, geoms.data(), geoms.size());
-    GEOSGeom ret = ST_BuildArea(ST_Collect(coll));
 
-    GEOSGeom_destroy(coll);
+    GEOSGeom coll = GEOSGeom_createCollection_r(
+        hdl,
+        GEOS_MULTILINESTRING,
+        geoms.data(),
+        geoms.size()
+    );
 
+    GEOSGeom ret = ST_BuildArea(coll);
+    GEOSGeom_destroy_r(hdl, coll);
     return ret;
 }
-
 
 /**
  * Mostly equivalent to the following function (topology/sql/populate.sql.in):
