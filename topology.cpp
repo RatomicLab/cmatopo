@@ -893,6 +893,49 @@ BEGIN
     */
 }
 
+void Topology::GetNodeEdges(int nodeId, vector<int>& edgeIds)
+{
+    typedef pair<double, int> az_edge_pair;
+    vector< az_edge_pair > azs;
+
+    for (edge* e : _edges) {
+        if (e->start_node == nodeId || e->end_node == nodeId) {
+            GEOSGeometry* geom = ST_RemoveRepeatedPoints(e->geom);
+
+            double az;
+            if (e->start_node == nodeId) {
+                GEOSGeometry* p1 = ST_StartPoint(geom);
+                GEOSGeometry* p2 = ST_PointN(geom, 2);
+                az = ST_Azimuth(p1, p2);
+                GEOSGeom_destroy_r(hdl, p1);
+                GEOSGeom_destroy_r(hdl, p2);
+
+                azs.push_back(make_pair(az, e->id));
+            }
+            else {
+                GEOSGeometry* p1 = ST_EndPoint(geom);
+                GEOSGeometry* p2 = ST_PointN(geom, GEOSGeomGetNumPoints_r(hdl, geom)-1);
+                az = ST_Azimuth(p1, p2);
+                GEOSGeom_destroy_r(hdl, p1);
+                GEOSGeom_destroy_r(hdl, p2);
+
+                azs.push_back(make_pair(az, -e->id));
+            }
+
+            GEOSGeom_destroy_r(hdl, geom);
+        }
+    }
+
+    // sort the edges by azimuth values
+    sort(azs.begin(), azs.end(), [](const az_edge_pair& a, const az_edge_pair& b) {
+        return a.first < b.first;
+    });
+
+    transform(azs.begin(), azs.end(), edgeIds.begin(), [](const az_edge_pair& a) {
+        return a.second;
+    });
+}
+
 /**
  * Mostly equivalent to the following function (topology/sql/sqlmm.sql.in):
  *   FUNCTION topology.ST_ModEdgeSplit(atopology varchar, anedge integer, apoint geometry)
