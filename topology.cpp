@@ -25,11 +25,14 @@ Topology::~Topology()
     delete_all(_edges);
     delete_all(_faces);
     delete_all(_relations);
+
+    if (_edge_idx) GEOSSTRtree_destroy_r(hdl, _edge_idx);
+    if (_node_idx) GEOSSTRtree_destroy_r(hdl, _node_idx);
 }
 
 void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance)
 {
-    assert (GEOSGeomTypeId(line) == GEOS_LINESTRING);
+    assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
 
     if (tolerance <= 0) {
         tolerance = _ST_MinTolerance(line);

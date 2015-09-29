@@ -19,7 +19,7 @@ const int DIST_MIN = 1;
 
 bool ST_Equals(const GEOSGeom g1, const GEOSGeom g2)
 {
-    return GEOSWithin(g1, g2) == 1 && GEOSWithin(g2, g1) == 1;
+    return GEOSWithin_r(hdl, g1, g2) == 1 && GEOSWithin_r(hdl, g2, g1) == 1;
 }
 
 /**
@@ -52,7 +52,7 @@ bool ST_IsEmpty(const GEOSGeom geom)
  */
 bool ST_Contains(const GEOSGeom g1, const GEOSGeom g2)
 {
-    return GEOSContains(g1, g2);
+    return GEOSContains_r(hdl, g1, g2);
 }
 
 /**
@@ -61,7 +61,7 @@ bool ST_Contains(const GEOSGeom g1, const GEOSGeom g2)
  */
 bool ST_OrderingEquals(const GEOSGeom g1, const GEOSGeom g2)
 {
-    if (GEOSGeomTypeId(g1) != GEOSGeomTypeId(g2)) {
+    if (GEOSGeomTypeId_r(hdl, g1) != GEOSGeomTypeId_r(hdl, g2)) {
         return false;
     }
 
@@ -306,9 +306,9 @@ GEOSGeom ST_MakeLine(const GEOSGeom g1, const GEOSGeom g2)
  */
 GEOSGeom ST_SetPoint(const GEOSGeometry* line, int index, const GEOSGeometry* point)
 {
-    assert (line && GEOSGeomTypeId(line) == GEOS_LINESTRING);
+    assert (line && GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
     assert (index >= 0 && index < GEOSGeomGetNumPoints_r(hdl, line));
-    assert (point && GEOSGeomTypeId(point) == GEOS_POINT);
+    assert (point && GEOSGeomTypeId_r(hdl, point) == GEOS_POINT);
 
     LWGEOM* lwgeom_line  = GEOS2LWGEOM(line, 0);
     LWGEOM* lwgeom_point = GEOS2LWGEOM(point, 0);
@@ -511,17 +511,17 @@ bool bounding_box(const GEOSGeom geom, vector<double>& bbox)
 {
     assert (bbox.size() == 0);
 
-    const GEOSCoordSequence* seq = GEOSGeom_getCoordSeq(geom);
+    const GEOSCoordSequence* seq = GEOSGeom_getCoordSeq_r(hdl, geom);
     unsigned int size;
-    GEOSCoordSeq_getSize(seq, &size);
+    GEOSCoordSeq_getSize_r(hdl, seq, &size);
 
     if (size < 1) {
         return false;
     }
 
     double x, y;
-    GEOSCoordSeq_getX(seq, 0, &x);
-    GEOSCoordSeq_getY(seq, 0, &y);
+    GEOSCoordSeq_getX_r(hdl, seq, 0, &x);
+    GEOSCoordSeq_getY_r(hdl, seq, 0, &y);
 
     double minX = x;
     double minY = y;
@@ -529,8 +529,8 @@ bool bounding_box(const GEOSGeom geom, vector<double>& bbox)
     double maxY = y;
 
     for (int idx = 1; idx < size; ++idx) {
-        GEOSCoordSeq_getX(seq, idx, &x);
-        GEOSCoordSeq_getY(seq, idx, &y);
+        GEOSCoordSeq_getX_r(hdl, seq, idx, &x);
+        GEOSCoordSeq_getY_r(hdl, seq, idx, &y);
 
         minX = min(minX, x);
         minY = min(minY, y);

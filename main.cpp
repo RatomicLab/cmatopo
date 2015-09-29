@@ -18,6 +18,7 @@ namespace cma {
 
 int main(int argc, char **argv)
 {
+    initGEOS(geos_message_function, geos_message_function);
     OGRRegisterAll();
 
     GEOSHelper geos = GEOSHelper();
@@ -61,6 +62,8 @@ int main(int argc, char **argv)
     }
 
     delete topology;
+
+    finishGEOS();
 
     return 0;
 
