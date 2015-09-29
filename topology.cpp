@@ -866,31 +866,29 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
     return newNode->id;
 }
 
-void Topology::_ST_AdjacentEdges(int nodeId, int edgeId, std::vector<int>& edges)
+void Topology::_ST_AdjacentEdges(int nodeId, int edgeId, vector<int>& edgeIds)
 {
-    // not implemented yet
-    assert(false);
-    /*
-    vector<int> edgestar
-  ret integer[];
-BEGIN
-  WITH edgestar AS (
-    SELECT *, count(*) over () AS cnt
-    FROM topology.GetNodeEdges(atopology, anode)
-  )
-  SELECT ARRAY[ (
-      SELECT p.edge AS prev FROM edgestar p
-      WHERE p.sequence = CASE WHEN m.sequence-1 < 1 THEN cnt
-                         ELSE m.sequence-1 END
-    ), (
-      SELECT p.edge AS prev FROM edgestar p WHERE p.sequence = ((m.sequence)%cnt)+1
-    ) ]
-  FROM edgestar m
-  WHERE edge = anedge
-  INTO ret;
+    vector<int> edgeStar;
+    GetNodeEdges(nodeId, edgeStar);
 
-  RETURN ret;
-    */
+    int msequence = 0;
+    int psequence = 0;
+
+    for (int mid : edgeStar) {
+        ++msequence;
+
+        if (mid == edgeId) {
+            for (int pid : edgeStar) {
+                ++psequence;
+
+                if (psequence == (msequence-1<1 ? edgeStar.size() : msequence-1) ||
+                    psequence == (msequence%edgeStar.size())+1)
+                {
+                    edgeIds.push_back(pid);
+                }
+            }
+        }
+    }
 }
 
 void Topology::GetNodeEdges(int nodeId, vector<int>& edgeIds)

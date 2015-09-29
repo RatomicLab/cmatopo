@@ -56,6 +56,7 @@ public:
     int ST_ChangeEdgeGeom(int edgeId, const GEOSGeom point);
     int ST_ModEdgeSplit(int edgeId, const GEOSGeom point);
     void _ST_AdjacentEdges(int nodeId, int edgeId, std::vector<int>& edges);
+    GetNodeEdges(int nodeId, std::vector<int>& edgeIds);
     void GetNodeEdges(int nodeId, std::vector<int>& edges);
     GEOSGeom ST_GetFaceGeometry(int faceId);
     int ST_AddIsoNode(const GEOSGeom point);
