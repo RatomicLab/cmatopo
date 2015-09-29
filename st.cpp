@@ -455,10 +455,31 @@ GEOSGeom ST_ClosestPoint(const GEOSGeom g1, const GEOSGeom g2)
     return ret;
 }
 
-GEOSGeom ST_CollectionExtract(const GEOSGeometry* geom, int type)
+GEOSGeometry* ST_CollectionExtract(GEOSGeometry* geom, int type)
 {
     assert (type >= 1 && type <= 3);
-    assert (GEOSGeomTypeId(geom) == GEOS_GEOMETRYCOLLECTION);
+
+    if (!is_collection(geom)) {
+        if (GEOSGeomTypeId_r(hdl, geom) == type) {
+            return geom;
+        }
+
+        GEOSGeometry* ret;
+        switch (type)
+        {
+            case GEOS_POINT:
+                ret = GEOSGeom_createEmptyPoint_r(hdl);
+                break;
+            case GEOS_LINESTRING:
+                ret = GEOSGeom_createEmptyLineString_r(hdl);
+                break;
+            case GEOS_LINEARRING:
+                ret = GEOSGeom_createLinearRing_r(hdl, NULL);   // this has not been tested and might not work
+                break;
+        };
+        assert (ret != NULL);
+        return ret;
+    }
 
     vector<GEOSGeom> geoms;
     for (int i = 0; i < GEOSGetNumGeometries_r(hdl, geom); ++i) {
@@ -544,6 +565,15 @@ bool bounding_box(const GEOSGeom geom, vector<double>& bbox)
     bbox.push_back(maxY);
 
     return true;
+}
+
+bool is_collection(const GEOSGeometry* geom)
+{
+    int type = GEOSGeomTypeId_r(hdl, geom);
+    return (type == GEOS_GEOMETRYCOLLECTION
+        || type == GEOS_MULTIPOINT
+        || type == GEOS_MULTILINESTRING
+        || type == GEOS_MULTIPOLYGON);
 }
 
 } // namespace cma

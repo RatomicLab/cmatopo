@@ -44,12 +44,13 @@ GEOSGeom ST_MakeValid(const GEOSGeometry* geom);
 GEOSGeom ST_StartPoint(const GEOSGeometry* geom);
 GEOSGeom ST_MakePolygon(const GEOSGeom geom);
 GEOSGeom ST_ClosestPoint(const GEOSGeom g1, const GEOSGeom g2);
-GEOSGeom ST_CollectionExtract(const GEOSGeometry* collection, int type);
+GEOSGeom ST_CollectionExtract(GEOSGeometry* collection, int type);
 GEOSGeom ST_RemoveRepeatedPoints(const GEOSGeom geom);
 
 int ST_NPoints(const GEOSGeometry* geom);
 
 bool bounding_box(const GEOSGeom geom, std::vector<double>& bbox);
+bool is_collection(const GEOSGeometry* geom);
 
 /**
  * Find, if it exists, the geometry from a set of geometries (others) which is the closest within
