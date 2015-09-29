@@ -22,7 +22,7 @@ void callback(void *item, void *userdata)
     char* s1 = GEOSWKTWriter_write_r(hdl, w, geom_contaning);
     char* s2 = GEOSWKTWriter_write_r(hdl, w, geom_contained);
 
-    cout << s1 << " may contains " << s2 << endl;
+    cout << s1 << " intersects with " << s2 << endl;
 
     GEOSFree_r(hdl, s1);
     GEOSFree_r(hdl, s2);

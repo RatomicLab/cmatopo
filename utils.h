@@ -21,16 +21,12 @@ public:
             wkbw = GEOSWKBWriter_create_r(hdl);
         }
     }
+    
     ~GEOSHelper() {
-        if (wkbr) {
-            GEOSWKBReader_destroy_r(hdl, wkbr);
-        }
-        if (wktr) {
-            GEOSWKTReader_destroy_r(hdl, wktr);
-        }
-        if (wkbw) {
-            GEOSWKBWriter_destroy_r(hdl, wkbw);
-        }
+        if (wkbr) GEOSWKBReader_destroy_r(hdl, wkbr);
+        if (wktr) GEOSWKTReader_destroy_r(hdl, wktr);
+        if (wkbw) GEOSWKBWriter_destroy_r(hdl, wkbw);
+
         finishGEOS_r(hdl);
     }
 

@@ -36,9 +36,7 @@ class edge {
         prev_right_edge(other.prev_right_edge),
         geom(GEOSGeom_clone(other.geom)) {}
 
-    ~edge() {
-        if (geom) GEOSGeom_destroy(geom);
-    }
+    ~edge();
 
     int id = NULLint;
     int start_node = NULLint;
@@ -52,17 +50,27 @@ class edge {
     int prev_left_edge  = NULLint;       // convenience
     int prev_right_edge = NULLint;      // convenience
     GEOSGeom geom = NULL;
+
+    bool intersects(const GEOSGeometry* geom);
+
+  private:
+    GEOSGeometry* _envelope = NULL;
+    GEOSGeometry* envelope();
 };
 
 class node {
   public:
-    ~node() {
-        if (geom) GEOSGeom_destroy(geom);
-    }
+    ~node();
 
     int id = NULLint;
     int containing_face = NULLint;
     GEOSGeom geom = NULL;
+
+    bool intersects(const GEOSGeometry* geom);
+
+  private:
+    GEOSGeometry* _envelope = NULL;
+    GEOSGeometry* envelope();
 };
 
 typedef struct {
