@@ -55,7 +55,7 @@ class edge {
 
   private:
     GEOSGeometry* _envelope = NULL;
-    GEOSGeometry* envelope();
+    const GEOSGeometry* envelope();
 };
 
 class node {
@@ -70,13 +70,22 @@ class node {
 
   private:
     GEOSGeometry* _envelope = NULL;
-    GEOSGeometry* envelope();
+    const GEOSGeometry* envelope();
 };
 
-typedef struct {
+class face {
+  public:
+    ~face();
+
     int id = NULLint;
     GEOSGeom mbr = NULL;
-} face;
+
+    bool intersects(const GEOSGeometry* geom);
+
+  private:
+    GEOSGeometry* _envelope = NULL;
+    const GEOSGeometry* envelope();
+};
 
 typedef struct {
     int element_id = NULLint;

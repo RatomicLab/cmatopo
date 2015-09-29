@@ -193,31 +193,35 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     assert (end_node_geom);
     assert (ST_Equals(end_node_geom, ST_EndPoint(geom)));
 
+    GEOSGeometry* geom_env = GEOSEnvelope_r(hdl, geom);
+
     for (node* n : _nodes) {
-        // TODO: to speed things up, check if bounding box of n->geom and geom intersects
-        // before checking for the related pattern. (postgis && operator)
-        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
-        assert (relate);
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
-        GEOSFree_r(hdl, relate);
+        if (n->intersects(geom_env)) {
+            char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
+            assert (relate);
+            assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
+            GEOSFree_r(hdl, relate);
+        }
     }
 
     for (edge* e : _edges) {
-        // TODO: to speed things up, check if bounding box of e->geom and geom intersects
-        // before checking for the related pattern. (postgis && operator)
-        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
-        assert (relate);
-        if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
+        if (e->intersects(geom_env)) {
+            char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
+            assert (relate);
+            if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
+                GEOSFree_r(hdl, relate);
+                continue;
+            }
+
+            assert (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 0);
+            assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
+            assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
+
             GEOSFree_r(hdl, relate);
-            continue;
         }
-
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 0);
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
-
-        GEOSFree_r(hdl, relate);
     }
+
+    GEOSGeom_destroy_r(hdl, geom_env);
 
     vector<edge*> edgesToStartNode;
     vector<edge*> edgesToEndNode;
@@ -444,6 +448,8 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
 
     bool ishole = (faceId != 0 && !isccw);
 
+    GEOSGeometry* shell_env = GEOSEnvelope_r(hdl, shell);
+
     vector<int> absNewRingEdges;
     transform(newRingEdges.begin(), newRingEdges.end(), absNewRingEdges.begin(), [](int id){
         return abs(id);
@@ -453,9 +459,8 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
             !_is_in(e->id, absNewRingEdges))
         {
             GEOSGeom closestPoint = GEOSInterpolate_r(hdl, e->geom, 0.2);
-            // TODO: check for bounding box intersection before ST_Contains to
-            // speed things up.
-            bool c = ST_Contains(shell, closestPoint);
+            // sqlmm.sql.in:~3092
+            bool c = e->intersects(shell_env) && ST_Contains(shell, closestPoint);
             GEOSGeom_destroy_r(hdl, closestPoint);
 
             c = ishole ? !c : c;
@@ -470,6 +475,8 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
             }
         }
     }
+
+    GEOSGeom_destroy_r(hdl, shell_env);
 
     for (node* n : _nodes) {
         if (n->containing_face == faceId) {
@@ -677,13 +684,18 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 
     vector<GEOSGeometry*> rng_info;
 
-    GEOSGeom coll = ST_Collect(ST_Envelope(oldEdge->geom), ST_Envelope(acurve));
+    GEOSGeometry* g1 = ST_Envelope(oldEdge->geom);
+    GEOSGeometry* g2 = ST_Envelope(acurve);
+    GEOSGeom coll = ST_Collect(g1, g2);
+    GEOSGeometry* coll_env = GEOSEnvelope_r(hdl, coll);
     for (node* n : _nodes) {
-        // TODO: to speed things up, check if bounding box of n->geom and coll intersects
-        if (n->id != oldEdge->start_node && n->id != oldEdge->end_node) {
+        if (n->id != oldEdge->start_node && n->id != oldEdge->end_node && n->intersects(coll_env)) {
             rng_info.push_back(n->geom);
         }
     }
+    GEOSGeom_destroy_r(hdl, g1);
+    GEOSGeom_destroy_r(hdl, g2);
+    GEOSGeom_destroy_r(hdl, coll_env);
 
     if (rng_info.size() > 0) {
         GEOSGeometry* nodes = GEOSGeom_createCollection_r(
@@ -1042,8 +1054,7 @@ int Topology::ST_AddIsoNode(const GEOSGeom point)
 
     int containing_face = NULLint;
     for (face* f : _faces) {
-        // TODO: check if the bounding box of f->mbr contains point
-        if (f->id > 0 && /* here && */ ST_Contains(ST_GetFaceGeometry(f->id), point)) {
+        if (f->id > 0 && f->intersects(point) && ST_Contains(ST_GetFaceGeometry(f->id), point)) {
             containing_face = f->id;
             break;
         }
