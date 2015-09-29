@@ -17,12 +17,16 @@ public:
         hdl = initGEOS_r(geos_message_function, geos_message_function);
         if (hdl) {
             wkbr = GEOSWKBReader_create_r(hdl);
+            wktr = GEOSWKTReader_create_r(hdl);
             wkbw = GEOSWKBWriter_create_r(hdl);
         }
     }
     ~GEOSHelper() {
         if (wkbr) {
             GEOSWKBReader_destroy_r(hdl, wkbr);
+        }
+        if (wktr) {
+            GEOSWKTReader_destroy_r(hdl, wktr);
         }
         if (wkbw) {
             GEOSWKBWriter_destroy_r(hdl, wkbw);
@@ -34,12 +38,17 @@ public:
         return wkbr;
     }
 
+    GEOSWKTReader* text_reader() {
+        return wktr;
+    }
+
     GEOSWKBWriter* writer() {
         return wkbw;
     }
 
 private:
     GEOSWKBReader* wkbr = NULL;
+    GEOSWKTReader* wktr = NULL;
     GEOSWKBWriter* wkbw = NULL;
 };
 
