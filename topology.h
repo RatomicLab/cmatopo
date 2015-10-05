@@ -8,6 +8,7 @@
 
 #include <st.h>
 #include <types.h>
+#include <utils.h>
 
 namespace cma {
 
@@ -27,7 +28,7 @@ class _span_t {
 class Topology
 {
 public:
-    Topology();
+    Topology(GEOSHelper& geos);
     ~Topology();
 
     template <class T>
@@ -60,11 +61,16 @@ public:
     GEOSGeom ST_GetFaceGeometry(int faceId);
     int ST_AddIsoNode(const GEOSGeom point);
 
+    void output_nodes() const;
+    void output_edges() const;
+
 private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
     std::vector<face*> _faces;
     std::vector<relation*> _relations;
+
+    GEOSHelper& _geos;
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;
@@ -74,7 +80,7 @@ private:
 
     int _ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly);
     void GetRingEdges(int edgeId, std::vector<int>& ringEdgeIds, int maxEdges=NULLint);
-    void _find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_t& span, edge* newEdge, bool isclosed);
+    void _find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_t& pan, bool span, edge* newEdge, bool isclosed);
 };
 
 template<class T>
