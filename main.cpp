@@ -12,6 +12,8 @@
 using namespace cma;
 using namespace std;
 
+const double DEFAULT_TOLERANCE = 1.;
+
 namespace cma {
     GEOSContextHandle_t hdl;
 }
@@ -36,12 +38,19 @@ int main(int argc, char **argv)
     }
 
     GEOSGeometry* world_extent = world_geom();
+    // GEOSGeometry* env = GEOSEnvelope_r(hdl, world_extent);
+    // cout << env << endl;
+    // env = GEOSEnvelope_r(hdl, world_extent);
+    // cout << env << endl << GEOSEnvelope_r(hdl, world_extent) << endl;
+    //
+    // return 0;
+
     std::vector<zoneInfo*> zones;
     prepare_zones(db, geos, world_extent, zones, 10);
     GEOSGeom_destroy_r(hdl, world_extent);
     // write_zones("output/test.shp", zones, true);
 
-    Topology* topology = new Topology();
+    Topology* topology = new Topology(geos);
 
     for (zoneInfo* zone : zones) {
         if (zone->second == 0) {
@@ -57,8 +66,13 @@ int main(int argc, char **argv)
 
         for (GEOSGeometry* line : lines) {
             vector<int> edgeIds;
-            topology->TopoGeo_AddLineString(line, edgeIds);
+            topology->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
         }
+
+        // remove me after debug
+        topology->output_nodes();
+        topology->output_edges();
+        break;
     }
 
     delete topology;
