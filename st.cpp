@@ -183,10 +183,11 @@ GEOSGeom ST_Split(const GEOSGeometry* in, const GEOSGeometry* blade_in)
     LWGEOM* lwgeom_out;
 
     lwgeom_out = lwgeom_split(lwgeom_in, lwblade_in);
-    lwgeom_free(lwgeom_in);
-    lwgeom_free(lwblade_in);
 
     GEOSGeom ret = LWGEOM2GEOS(lwgeom_out);
+
+    lwgeom_free(lwblade_in);
+    lwgeom_free(lwgeom_in);
     lwgeom_free(lwgeom_out);
 
     return ret;
@@ -195,8 +196,8 @@ GEOSGeom ST_Split(const GEOSGeometry* in, const GEOSGeometry* blade_in)
 GEOSGeom ST_PointN(const GEOSGeometry* line, int index)
 {
     assert (line && GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
-    assert (index >= 0 && index < GEOSGeomGetNumPoints_r(hdl, line));
-    return GEOSGeomGetPointN_r(hdl, line, index);
+    assert (index > 0 && index <= GEOSGeomGetNumPoints_r(hdl, line)); // index is one-based in PostGIS
+    return GEOSGeomGetPointN_r(hdl, line, index-1);
 }
 
 GEOSGeom ST_Collect(GEOSGeometry* g1, GEOSGeometry* g2)
@@ -206,7 +207,7 @@ GEOSGeom ST_Collect(GEOSGeometry* g1, GEOSGeometry* g2)
     // After this point, g1 and g2 should not be freed.
     // Only the created collection should.
 
-    return GEOSGeom_createCollection_r(hdl, GEOS_GEOMETRYCOLLECTION, geoms, g2 == NULL ? 1 : 2);
+    return GEOSGeom_createCollection_r(hdl, GEOS_MULTILINESTRING, geoms, g2 == NULL ? 1 : 2);
 }
 
 /**
@@ -306,6 +307,7 @@ GEOSGeom ST_MakeLine(const GEOSGeom g1, const GEOSGeom g2)
  */
 GEOSGeom ST_SetPoint(const GEOSGeometry* line, int index, const GEOSGeometry* point)
 {
+    // index is 0-based in PostGIS
     assert (line && GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
     assert (index >= 0 && index < GEOSGeomGetNumPoints_r(hdl, line));
     assert (point && GEOSGeomTypeId_r(hdl, point) == GEOS_POINT);

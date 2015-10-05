@@ -62,8 +62,12 @@ const T* closest_and_within(const GEOSGeom geom, const std::vector<T*>& others, 
     const T* item = NULL;
     double previousDistance = std::numeric_limits<double>::max();
     for (const T* other : others) {
-        if (ST_DWithin(other->geom, geom, tolerance) && (previousDistance = ST_Distance(geom, other->geom)) < previousDistance) {
-            item = other;
+        if (other && ST_DWithin(other->geom, geom, tolerance)) {
+            double d = ST_Distance(geom, other->geom);
+            if (d < previousDistance) {
+                item = other;
+            }
+            previousDistance = d;
         }
     }
     return item;
