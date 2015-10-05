@@ -1,6 +1,8 @@
 #include <utils.h>
 
 #include <omp.h>
+#include <cstdio>
+#include <stdarg.h>
 
 namespace cma {
 
@@ -14,8 +16,10 @@ int get_nb_threads()
 
 void geos_message_function(const char *fmt, ...)
 {
-    // TODO: do something with the message here eventually
-    return;
+    va_list ap, ap2;
+    va_start(ap, fmt);
+    printf(fmt, ap);
+    va_end (ap);
 }
 
 } // namespace cma
