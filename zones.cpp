@@ -61,7 +61,6 @@ void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, doub
 // void prepare_zones(const linesV& lines, const OGREnvelope& extent, vector<zoneInfo*>& zones, int maxdepth)
 void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo*>& zones, int maxdepth)
 {
-    cout << "maxdepth: " << maxdepth << endl;
     assert (extent);
     assert (maxdepth >= 1);
     assert (!omp_in_parallel());
@@ -72,7 +71,8 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
     size_t size;
     unsigned char* hex_extent = GEOSWKBWriter_writeHEX_r(hdl, geos.writer(), extent, &size);
 
-    cout << hex_extent << endl;
+    cout.write((const char*)hex_extent, size);
+    cout << endl;
 
     int nThreads = get_nb_threads();
     double width  = fabs(maxX - minX);
@@ -216,9 +216,9 @@ void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bo
         fs::remove(filename);
     }
 
-    OGRSFDriver* shpDriver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
+    GDALDriver* shpDriver = GetGDALDriverManager()->GetDriverByName("ESRI Shapefile");
     assert (shpDriver != NULL);
-    OGRDataSource *zonesDS = shpDriver->CreateDataSource(filename.c_str(), NULL);
+    GDALDataset *zonesDS = shpDriver->Create(filename.c_str(), 0, 0, 0, GDT_Unknown, NULL);
     assert (zonesDS != NULL);
     OGRSpatialReference oSRS;
     oSRS.SetWellKnownGeogCS( "WGS84" );
@@ -262,7 +262,7 @@ void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bo
         OGRFeature::DestroyFeature(poFeature);
     }
 
-    OGRDataSource::DestroyDataSource(zonesDS);
+    GDALClose(zonesDS);
 }
 
 GEOSGeometry* world_geom()
