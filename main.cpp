@@ -66,13 +66,16 @@ int main(int argc, char **argv)
 
         for (GEOSGeometry* line : lines) {
             vector<int> edgeIds;
-            topology->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+            try {
+                topology->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+            }
+            catch (const invalid_argument& ex) {
+                cerr << geos.as_string(line) << ": " << ex.what() << endl;
+            }
         }
 
-        // remove me after debug
         topology->output_nodes();
         topology->output_edges();
-        break;
     }
 
     delete topology;
