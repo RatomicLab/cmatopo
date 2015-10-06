@@ -851,7 +851,10 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
 
     edge* oldEdge = _edges[edgeId];
     assert (oldEdge);
-    assert (GEOSWithin_r(hdl, point, oldEdge->geom) == 1);
+
+    if (GEOSWithin_r(hdl, point, oldEdge->geom) != 1) {
+        throw invalid_argument("SQL/MM Spatial exception - point not on edge");
+    }
 
     const node* coincidentNode = get_node_at(ST_X(point), ST_Y(point));
     assert (!coincidentNode);
