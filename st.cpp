@@ -382,7 +382,6 @@ GEOSGeom ST_GeometryN(const GEOSGeom geom, int index)
 
     GEOSGeom ret = LWGEOM2GEOS(subgeom);
 
-    lwgeom_free(lwgeom);
     lwcollection_free(coll);
 
     return ret;

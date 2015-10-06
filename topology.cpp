@@ -886,7 +886,7 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
     newEdge->abs_next_right_edge = abs(newEdge->next_right_edge);
     _edges.push_back(newEdge);
 
-    tmp = newedge1;
+    tmp = oldEdge->geom;
     oldEdge->geom = newedge1;
     GEOSGeom_destroy_r(hdl, tmp);
     oldEdge->next_left_edge = newEdge->id;
@@ -983,7 +983,7 @@ void Topology::GetNodeEdges(int nodeId, vector<int>& edgeIds)
         return a.first < b.first;
     });
 
-    transform(azs.begin(), azs.end(), edgeIds.begin(), [](const az_edge_pair& a) {
+    transform(azs.begin(), azs.end(), std::back_inserter(edgeIds), [](const az_edge_pair& a) {
         return a.second;
     });
 }
@@ -1054,16 +1054,15 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
                 snapedge = ST_MakeLine(sp, snapedge);
             }
 
+            // snapedge must not be destroyed since it gets assigned to oldEdge->geom
             ST_ChangeEdgeGeom(oldEdge->id, snapedge);
 
             GEOSGeom_destroy_r(hdl, sp);
             GEOSGeom_destroy_r(hdl, ep);
-            GEOSGeom_destroy_r(hdl, snapedge);
         }
 
+        // point must not be destroyed as it gets assigned to a new node's geometry
         id = ST_ModEdgeSplit(oldEdge->id, point);
-
-        GEOSGeom_destroy_r(hdl, point);
     }
     else {
         id = ST_AddIsoNode(geom);
