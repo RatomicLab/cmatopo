@@ -35,6 +35,10 @@ public:
         finishGEOS_r(hdl);
     }
 
+    GEOSContextHandle_t handle() const {
+        return hdl;
+    }
+
     GEOSWKBReader* reader() {
         return wkbr;
     }
