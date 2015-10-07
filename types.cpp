@@ -17,6 +17,14 @@ bool edge::intersects(const GEOSGeometry* geom)
     return GEOSIntersects_r(hdl, envelope(), geom) == 1;
 }
 
+const GEOSPreparedGeometry* edge::prepared()
+{
+    if (!_prepared) {
+        _prepared = GEOSPrepare_r(hdl, geom);
+    }
+    return _prepared;
+}
+
 const GEOSGeometry* edge::envelope()
 {
     if (!_envelope) {
@@ -34,6 +42,14 @@ node::~node()
 bool node::intersects(const GEOSGeometry* geom)
 {
     return GEOSIntersects_r(hdl, envelope(), geom) == 1;
+}
+
+const GEOSPreparedGeometry* node::prepared()
+{
+    if (!_prepared) {
+        _prepared = GEOSPrepare_r(hdl, geom);
+    }
+    return _prepared;
 }
 
 const GEOSGeometry* node::envelope()

@@ -53,8 +53,12 @@ class edge {
 
     bool intersects(const GEOSGeometry* geom);
 
+    const GEOSPreparedGeometry* prepared();
+
   private:
     GEOSGeometry* _envelope = NULL;
+    const GEOSPreparedGeometry* _prepared = NULL;
+
     const GEOSGeometry* envelope();
 };
 
@@ -68,8 +72,12 @@ class node {
 
     bool intersects(const GEOSGeometry* geom);
 
+    const GEOSPreparedGeometry* prepared();
+
   private:
     GEOSGeometry* _envelope = NULL;
+    const GEOSPreparedGeometry* _prepared = NULL;
+
     const GEOSGeometry* envelope();
 };
 
