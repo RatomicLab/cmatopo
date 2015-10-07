@@ -236,7 +236,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         }
     }
 
-    GEOSGeom_destroy_r(hdl, geom_env);
+    GEOSGeom_destroy_r(hdl, geom_env); // double-free?
 
     vector<edge*> edgesToStartNode;
     vector<edge*> edgesToEndNode;
@@ -636,8 +636,14 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 {
     assert (!_is_null(edgeId) && edgeId < _edges.size());
     assert (acurve != NULL);
-    assert (GEOSGeomTypeId_r(hdl, acurve) == GEOS_LINESTRING);
-    assert (GEOSisSimple_r(hdl, acurve) == 1);
+
+    if (GEOSGeomTypeId_r(hdl, acurve) != GEOS_LINESTRING) {
+        throw invalid_argument("SQL/MM Spatial exception - invalid curve");
+    }
+
+    if (GEOSisSimple_r(hdl, acurve) != 1) {
+        throw invalid_argument("SQL/MM Spatial exception - curve not simple");
+    }
 
     edge* oldEdge = _edges[edgeId];
 
@@ -668,6 +674,10 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     else {
         GEOSGeometry* ep1 = ST_EndPoint(acurve);
         GEOSGeometry* ep2 = ST_EndPoint(oldEdge->geom);
+        // cout << _geos.as_string(ep1) << " ==? " << _geos.as_string(ep2) << endl;
+        if (!ST_Equals(ep1, ep2)) {
+            throw invalid_argument("SQL/MM Spatial exception - end node not geometry end point.");
+        }
         assert (ST_Equals(ep1, ep2));
         GEOSGeom_destroy_r(hdl, ep1);
         GEOSGeom_destroy_r(hdl, ep2);
@@ -756,7 +766,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         }
 
         GEOSGeometry* g = r1;
-        r1 = ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(r1)), 3);
+        r1 = ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(r1)), GEOS_POLYGON);
         GEOSGeom_destroy_r(hdl, g);
 
         GEOSGeometry* r2 = ST_MakeLine(acurve, tmp1);
