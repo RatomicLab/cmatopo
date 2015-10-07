@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <cassert>
+#include <iostream>
 #include <algorithm>
 
 extern "C" {
@@ -30,13 +31,9 @@ bool ST_DWithin(const GEOSGeom g1, const GEOSGeom g2, double tolerance)
 {
     assert (tolerance >= 0.);
 
-    LWGEOM* lwgeom1 = GEOS2LWGEOM(g1, 0);
-    LWGEOM* lwgeom2 = GEOS2LWGEOM(g2, 0);
+    double distance;
 
-    double distance = lwgeom_mindistance2d_tolerance(lwgeom1, lwgeom2, tolerance);
-
-    lwgeom_free(lwgeom1);
-    lwgeom_free(lwgeom2);
+    GEOSDistance_r(hdl, g1, g2, &distance);
 
     return distance < tolerance;
 }
@@ -65,28 +62,20 @@ bool ST_OrderingEquals(const GEOSGeom g1, const GEOSGeom g2)
         return false;
     }
 
-    LWGEOM* lwg1 = GEOS2LWGEOM(g1, 0);
-    LWGEOM* lwg2 = GEOS2LWGEOM(g2, 0);
-
-    bool ret = lwgeom_same(lwg1, lwg2);
-
-    lwgeom_free(lwg1);
-    lwgeom_free(lwg2);
-
-    return ret;
+    return GEOSEqualsExact_r(hdl, g1, g2, 0.) == 1;
 }
 
 double ST_X(const GEOSGeom geom)
 {
     double x;
-    GEOSGeomGetX(geom, &x);
+    GEOSGeomGetX_r(hdl, geom, &x);
     return x;
 }
 
 double ST_Y(const GEOSGeom geom)
 {
     double y;
-    GEOSGeomGetY(geom, &y);
+    GEOSGeomGetY_r(hdl, geom, &y);
     return y;
 }
 
@@ -456,16 +445,29 @@ GEOSGeom ST_ClosestPoint(const GEOSGeom g1, const GEOSGeom g2)
     return ret;
 }
 
+/**
+ * Extract geometries of the specified type from the collection.
+ *
+ * Supported types:
+ *  - point
+ *  - linestring
+ *  - linearring
+ *  - polygon
+ *
+ * If the input geometry is not a collection and of the requested type,
+ * it is returned as-is (not a copy). If it is not a collection and not of
+ * the requested type, an empty geometry of the specified type is returned.
+ */
 GEOSGeometry* ST_CollectionExtract(GEOSGeometry* geom, int type)
 {
-    assert (type >= 1 && type <= 3);
+    assert (type >= 1 && type <= 4);
 
     if (!is_collection(geom)) {
         if (GEOSGeomTypeId_r(hdl, geom) == type) {
             return geom;
         }
 
-        GEOSGeometry* ret;
+        GEOSGeometry* ret = NULL;
         switch (type)
         {
             case GEOS_POINT:
@@ -476,6 +478,9 @@ GEOSGeometry* ST_CollectionExtract(GEOSGeometry* geom, int type)
                 break;
             case GEOS_LINEARRING:
                 ret = GEOSGeom_createLinearRing_r(hdl, NULL);   // this has not been tested and might not work
+                break;
+            case GEOS_POLYGON:
+                ret = GEOSGeom_createEmptyPolygon_r(hdl);
                 break;
         };
         assert (ret != NULL);
