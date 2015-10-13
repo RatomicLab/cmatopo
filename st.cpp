@@ -16,7 +16,7 @@ using namespace std;
 
 namespace cma {
 
-const int DIST_MIN = 1;
+const float DIST_MIN = 1.;
 
 bool ST_Equals(const GEOSGeom g1, const GEOSGeom g2)
 {
@@ -27,7 +27,7 @@ bool ST_Equals(const GEOSGeom g1, const GEOSGeom g2)
  * Mostly equivalent to the following function (postgis/lwgeom_functions_basic.c):
  *   Datum LWGEOM_dwithin(PG_FUNCTION_ARGS)
  */
-bool ST_DWithin(const GEOSGeom g1, const GEOSGeom g2, double tolerance)
+bool ST_DWithin(const GEOSGeometry* g1, const GEOSGeometry* g2, double tolerance)
 {
     assert (tolerance >= 0.);
 
@@ -118,7 +118,7 @@ double ST_Azimuth(const GEOSGeometry* g1, const GEOSGeometry* g2)
  * Mostly equivalent to the following function (postgis/lwgeom_functions_basic.c):
  *   Datum LWGEOM_mindistance2d(PG_FUNCTION_ARGS)
  */
-double ST_Distance(const GEOSGeom g1, const GEOSGeom g2)
+double ST_Distance(const GEOSGeometry* g1, const GEOSGeometry* g2)
 {
     LWGEOM* lwgeom1 = GEOS2LWGEOM(g1, 0);
     LWGEOM* lwgeom2 = GEOS2LWGEOM(g2, 0);
@@ -135,11 +135,15 @@ double _ST_MinTolerance(const GEOSGeom geom)
 {
     vector<double> bbox;
     bounding_box(geom, bbox);
+    vector<double> fbbox;
+    transform(bbox.begin(), bbox.end(), back_inserter(fbbox), [](double c) {
+        return fabs(c);
+    });
 
-    int _max = (int)*max_element(bbox.begin(), bbox.end());
-    int val = _max != 0 ? _max : 1;
+    double _max = *max_element(fbbox.begin(), fbbox.end());
+    double val = _max != 0. ? _max : 1.;
 
-    return 3.6 * pow(10,  -(15 - log(val)));
+    return 3.6 * pow(10,  -(15 - log10(val)));
 }
 
 /**
