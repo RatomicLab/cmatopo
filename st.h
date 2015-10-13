@@ -16,7 +16,7 @@ extern GEOSContextHandle_t hdl;
  */
 
 bool ST_Equals(const GEOSGeom g1, const GEOSGeom g2);
-bool ST_DWithin(const GEOSGeom g1, const GEOSGeom g2, double tolerance);
+bool ST_DWithin(const GEOSGeometry* g1, const GEOSGeometry* g2, double tolerance);
 bool ST_IsEmpty(const GEOSGeom geom);
 bool ST_Contains(const GEOSGeom g1, const GEOSGeom g2);
 bool ST_OrderingEquals(const GEOSGeom g1, const GEOSGeom g2);
@@ -24,7 +24,7 @@ bool ST_OrderingEquals(const GEOSGeom g1, const GEOSGeom g2);
 double ST_X(const GEOSGeom geom);
 double ST_Y(const GEOSGeom geom);
 double ST_Azimuth(const GEOSGeometry* g1, const GEOSGeometry* g2);
-double ST_Distance(const GEOSGeom g1, const GEOSGeom g2);
+double ST_Distance(const GEOSGeometry* g1, const GEOSGeometry* g2);
 double _ST_MinTolerance(const GEOSGeom geom);
 
 GEOSGeom ST_Snap(const GEOSGeom g1, const GEOSGeom g2, double tolerance);
@@ -51,27 +51,6 @@ int ST_NPoints(const GEOSGeometry* geom);
 
 bool bounding_box(const GEOSGeom geom, std::vector<double>& bbox);
 bool is_collection(const GEOSGeometry* geom);
-
-/**
- * Find, if it exists, the geometry from a set of geometries (others) which is the closest within
- * a specified tolerance.
- */
-template <class T>
-const T* closest_and_within(const GEOSGeom geom, const std::vector<T*>& others, double tolerance)
-{
-    const T* item = NULL;
-    double previousDistance = std::numeric_limits<double>::max();
-    for (T* other : others) {
-        if (other && other->intersects(geom) && ST_DWithin(other->geom, geom, tolerance)) {
-            double d = ST_Distance(geom, other->geom);
-            if (d < previousDistance) {
-                item = other;
-            }
-            previousDistance = d;
-        }
-    }
-    return item;
-}
 
 } // namespace cma
 
