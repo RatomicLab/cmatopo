@@ -16,13 +16,34 @@ namespace cma {
 typedef std::vector<GEOSGeometry *> linesV;
 typedef std::pair<OGREnvelope, int> zoneInfo;
 
-class edge {
+class geom_container
+{
   public:
-    edge() {}
+      geom_container() {}
+      geom_container(const geom_container& other): geom(GEOSGeom_clone(other.geom)) {}
+
+      virtual ~geom_container();
+
+      const GEOSGeometry* envelope();
+      const GEOSPreparedGeometry* prepared();
+
+      virtual bool intersects(const GEOSGeometry* geom);
+
+      GEOSGeometry* geom = NULL;
+
+  protected:
+      GEOSGeometry* _envelope = NULL;
+      const GEOSPreparedGeometry* _prepared = NULL;
+};
+
+class edge : public geom_container {
+  public:
+    edge(): geom_container() {}
 
     edge(const edge* other): edge(*other) {}
 
     edge(const edge& other):
+        geom_container(other),
         id(other.id),
         start_node(other.start_node),
         end_node(other.end_node),
@@ -33,10 +54,9 @@ class edge {
         left_face(other.left_face),
         right_face(other.right_face),
         prev_left_edge(other.prev_left_edge),
-        prev_right_edge(other.prev_right_edge),
-        geom(GEOSGeom_clone(other.geom)) {}
+        prev_right_edge(other.prev_right_edge) {};
 
-    ~edge();
+    virtual ~edge() {}
 
     int id = NULLint;
     int start_node = NULLint;
@@ -48,66 +68,29 @@ class edge {
     int left_face  = NULLint;
     int right_face = NULLint;
     int prev_left_edge  = NULLint;       // convenience
-    int prev_right_edge = NULLint;      // convenience
-    GEOSGeom geom = NULL;
-
-    bool intersects(const GEOSGeometry* geom);
-
-    const GEOSPreparedGeometry* prepared();
-
-  private:
-    GEOSGeometry* _envelope = NULL;
-    const GEOSPreparedGeometry* _prepared = NULL;
-
-    const GEOSGeometry* envelope();
+    int prev_right_edge = NULLint;       // convenience
 };
 
-class node {
+class node : public geom_container {
   public:
-    ~node();
-
+    virtual ~node() {}
+    virtual bool intersects(const GEOSGeometry* geom);
+    
     int id = NULLint;
     int containing_face = NULLint;
-    GEOSGeom geom = NULL;
-
-    bool intersects(const GEOSGeometry* geom);
-
-    const GEOSPreparedGeometry* prepared();
-
-  private:
-    GEOSGeometry* _envelope = NULL;
-    const GEOSPreparedGeometry* _prepared = NULL;
-
-    const GEOSGeometry* envelope();
 };
 
-class face {
+class face : public geom_container {
   public:
-    ~face();
+    virtual ~face() {}
 
     int id = NULLint;
-    GEOSGeom mbr = NULL;
-
-    bool intersects(const GEOSGeometry* geom);
-
-  private:
-    GEOSGeometry* _envelope = NULL;
-    const GEOSGeometry* envelope();
 };
 
 typedef struct {
     int element_id = NULLint;
     int element_type = NULLint;
 } relation;
-
-inline void sort_zones_by_line_count(std::vector<zoneInfo*>& zones, bool reverse_sort=false) {
-    std::sort(zones.begin(), zones.end(), [](zoneInfo* a, zoneInfo* b) {
-        return a < b;
-    });
-    if (reverse_sort) {
-        reverse(zones.begin(), zones.end());
-    }
-}
 
 } // namespace cma
 
