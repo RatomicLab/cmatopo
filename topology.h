@@ -30,18 +30,26 @@ class _span_t {
     bool was_isolated = false;
 };
 
+/**
+ * Types used for indexing.
+ */
+typedef boost::geometry::model::d2::point_xy<double> point;
+typedef boost::geometry::model::box<point> box;
+typedef std::pair<box,   int> edge_value;
+typedef std::pair<point, int> node_value;
+typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<30000> > edge_idx_t;
+typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<30000> > node_idx_t;
+
+/**
+ * Other useful types.
+ */
+typedef boost::geometry::model::polygon<point> polygon;
+typedef boost::geometry::model::linestring<point> linestring;
+typedef boost::geometry::model::multi_linestring<linestring> multi_linestring;
+
 class Topology
 {
 public:
-    typedef boost::geometry::model::d2::point_xy<double> point;
-    typedef boost::geometry::model::box<point> box;
-    //typedef boost::geometry::model::polygon<point> poly;
-    typedef std::pair<box,   int> edge_value;
-    //typedef std::pair<poly,  int> edge_value;
-    typedef std::pair<point, int> node_value;
-    typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<30000> > edge_idx_t;
-    typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<30000> > node_idx_t;
-
     Topology(GEOSHelper& geos);
     ~Topology();
 
@@ -59,15 +67,15 @@ public:
     int TopoGeo_AddPoint(GEOSGeom point, double tolerance=0.);
 
     const node* get_node_at(double x, double y) {
-        for (node* n : _nodes) {
-            if (!n) continue;
+        std::vector<node_value> nodes;
+        _node_idx->query(boost::geometry::index::intersects(point(x,y)), back_inserter(nodes));
+        assert (nodes.size() == 0 || nodes.size() == 1);
 
-            // TODO: speedup by testing if n->geom bounding box contains the point POINT(x,y)
-            if (ST_X(n->geom) == x && ST_Y(n->geom) == y) {
-                return n;
-            }
+        if (nodes.size() == 0) {
+            return NULL;
         }
-        return NULL;
+
+        return _nodes[nodes[0].second];
     }
 
     int ST_ChangeEdgeGeom(int edgeId, const GEOSGeom point);
@@ -83,13 +91,8 @@ public:
     void output_nodes() const;
     void output_edges() const;
 
+    const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);
-
-    template <class T>
-    bool contains(const edge* a, const T* b);
-
-    template <class T>
-    bool intersects(const edge* a, const T* b);
 
 private:
     std::vector<node*> _nodes;
@@ -99,8 +102,26 @@ private:
 
     GEOSHelper& _geos;
 
+    /**
+     * Edge envelope index.
+     */
     edge_idx_t* _edge_idx = NULL;
+
+    /**
+     * Edge envelope + tolerance around it index.
+     */
+    edge_idx_t* _edge_tol_idx = NULL;
+
+    /**
+     * Node index.
+     */
     node_idx_t* _node_idx = NULL;
+
+    /**
+     * Node + tolerance around it.
+     * edge_idx_t* is not a typo, we store boxes.
+     */
+    edge_idx_t* _node_tol_idx = NULL;
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;
@@ -117,46 +138,14 @@ private:
 };
 
 /**
- * Detect if a's bounding box contains b's bounding box, using the edge index.
+ * Convert a GEOS geometry (GEOS_MULTILINESTRING) to a Boost multi_linestring.
  */
-template <class T>
-bool Topology::contains(const edge* a, const T* b) {
-    const GEOSGeometry* bshell = GEOSGetExteriorRing_r(hdl, b->envelope());
-    GEOSGeometry* sp = GEOSGeomGetPointN_r(hdl, bshell, 0);
-    GEOSGeometry* ep = GEOSGeomGetPointN_r(hdl, bshell, 3);
-    double spX, spY, epX, epY;
-    GEOSGeomGetX_r(hdl, sp, &spX);
-    GEOSGeomGetY_r(hdl, sp, &spY);
-    GEOSGeomGetX_r(hdl, ep, &epX);
-    GEOSGeomGetY_r(hdl, ep, &epY);
-    box bbounds(point(spX, spY), point(epX, epY));
-    GEOSGeom_destroy_r(hdl, sp);
-    GEOSGeom_destroy_r(hdl, ep);
-
-    std::vector<value> results_s;
-    _edge_idx->query(boost::geometry::index::contains(bbounds), std::back_inserter(results_s));
-}
+void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls);
 
 /**
- * Detect if a's bounding box contains b's bounding box, using the edge index.
+ * Convert a GEOS geometry (GEOS_LINESTRING or GEOS_LINEARRING) to a Boost linestring.
  */
-template <class T>
-bool Topology::intersects(const edge* a, const T* b) {
-    const GEOSGeometry* bshell = GEOSGetExteriorRing_r(hdl, b->envelope());
-    GEOSGeometry* sp = GEOSGeomGetPointN_r(hdl, bshell, 0);
-    GEOSGeometry* ep = GEOSGeomGetPointN_r(hdl, bshell, 3);
-    double spX, spY, epX, epY;
-    GEOSGeomGetX_r(hdl, sp, &spX);
-    GEOSGeomGetY_r(hdl, sp, &spY);
-    GEOSGeomGetX_r(hdl, ep, &epX);
-    GEOSGeomGetY_r(hdl, ep, &epY);
-    box bbounds(point(spX, spY), point(epX, epY));
-    GEOSGeom_destroy_r(hdl, sp);
-    GEOSGeom_destroy_r(hdl, ep);
-
-    std::vector<value> results_s;
-    _edge_idx->query(boost::geometry::index::intersects(bbounds), std::back_inserter(results_s));
-}
+void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls);
 
 template<class T>
 bool Topology::_is_in(T hay, const std::vector<T>& stack) const
@@ -182,27 +171,6 @@ void Topology::delete_all(std::vector<T*>& v) {
 }
 
 /**
- * Find, if it exists, the geometry from a set of geometries (others) which is the closest within
- * a specified tolerance.
- */
-template <class T>
-const T* closest_and_within(const GEOSGeom geom, const std::vector<T*>& others, double tolerance)
-{
-    const T* item = NULL;
-    double previousDistance = std::numeric_limits<double>::max();
-    for (T* other : others) {
-        if (other && other->intersects(geom) && ST_DWithin(other->geom, geom, tolerance)) {
-            double d = ST_Distance(geom, other->geom);
-            if (d < previousDistance) {
-                item = other;
-            }
-            previousDistance = d;
-        }
-    }
-    return item;
-}
-
-/**
  * Return all items intersecting with geom in the given index.
  */
 template <class IndexType, class Value>
@@ -211,45 +179,48 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
     assert (geom);
     assert (edgeIds.size() == 0);
 
-    GEOSGeometry* envelope = NULL;
-    const GEOSGeometry* bshell = NULL;
-
     std::vector<Value> results_s;
 
-    if (GEOSGeomTypeId_r(hdl, geom) == GEOS_POINT) {
+    switch (GEOSGeomTypeId_r(hdl, geom))
+    {
+    case GEOS_POINT: {
         double x, y;
         GEOSGeomGetX_r(hdl, geom, &x);
         GEOSGeomGetY_r(hdl, geom, &y);
         point pt(x, y);
-        _edge_idx->query(boost::geometry::index::intersects(pt), back_inserter(results_s));
+        index->query(boost::geometry::index::intersects(pt), back_inserter(results_s));
+        break;
     }
-    else {
-        envelope = GEOSEnvelope_r(hdl, geom);
-        bshell = GEOSGetExteriorRing_r(hdl, envelope);
+    case GEOS_LINESTRING:
+    case GEOS_POLYGON: {
+        const GEOSGeometry* g = geom;
+        if (GEOSGeomTypeId_r(hdl, geom) == GEOS_POLYGON) {
+            g = GEOSGetExteriorRing_r(hdl, geom);
+        }
 
-        GEOSGeometry* sp = GEOSGeomGetPointN_r(hdl, bshell, 0);
-        GEOSGeometry* ep = GEOSGeomGetPointN_r(hdl, bshell, 3);
-        double spX, spY, epX, epY;
-        GEOSGeomGetX_r(hdl, sp, &spX);
-        GEOSGeomGetY_r(hdl, sp, &spY);
-        GEOSGeomGetX_r(hdl, ep, &epX);
-        GEOSGeomGetY_r(hdl, ep, &epY);
-        box bbounds(point(spX, spY), point(epX, epY));
-        GEOSGeom_destroy_r(hdl, sp);
-        GEOSGeom_destroy_r(hdl, ep);
+        linestring ls;
+        GEOM2BOOSTLS(g, ls);
+        index->query(boost::geometry::index::intersects(ls), back_inserter(results_s));
 
-        _edge_idx->query(boost::geometry::index::intersects(bbounds), back_inserter(results_s));
+        break;
     }
+    case GEOS_MULTILINESTRING: {
+        multi_linestring mls;
+        GEOM2BOOSTMLS(geom, mls);
+        index->query(boost::geometry::index::intersects(mls), back_inserter(results_s));
 
-/*
-    std::cout << _geos.as_string(geom) << std::endl;
-    std::cout << _geos.as_string(envelope) << std::endl;
-    std::cout << _geos.as_string(bshell) << std::endl;
-*/
-
-    if (envelope) {
-        GEOSGeom_destroy_r(hdl, envelope);
+        break;
     }
+    default:
+        std::cout << GEOSGeomTypeId_r(hdl, geom)  << endl;
+        throw std::invalid_argument("unsupported geometry type.");
+    };
+
+    // Sort by id. Strickly speaking, this is not necessary but we want to
+    // maintain order to compare our results with PostGIS.
+    sort(results_s.begin(), results_s.end(), [](const Value& a, const Value& b) {
+        return a.second < b.second;
+    });
 
     if (results_s.size() > 0) {
         edgeIds.reserve(results_s.size()+1);
