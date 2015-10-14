@@ -25,7 +25,7 @@ namespace cma {
  * Note: rows*cols must equals nThreads
  */
 const int rows = 2;
-const int cols = 4;
+const int cols = 2;
 
 void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, double* minY, double* maxY)
 {
@@ -71,9 +71,7 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
     size_t size;
     unsigned char* hex_extent = GEOSWKBWriter_writeHEX_r(hdl, geos.writer(), extent, &size);
 
-    cout.write((const char*)hex_extent, size);
-    cout << endl;
-
+    omp_set_num_threads(rows*cols);
     int nThreads = get_nb_threads();
     double width  = fabs(maxX - minX);
     double height = fabs(maxY - minY);
@@ -104,6 +102,7 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
         local_extent.MinY = minY + row * local_height;
         local_extent.MaxY = local_extent.MinY + local_height;
 
+        /*
         ostringstream local_wkt_extent;
         local_wkt_extent << "LINESTRING (";
         local_wkt_extent << local_extent.MinX << " " << local_extent.MinY << ", ";  // lower left
@@ -112,7 +111,12 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
         local_wkt_extent << local_extent.MinX << " " << local_extent.MaxY << ", ";  // upper left
         local_wkt_extent << local_extent.MinX << " " << local_extent.MinY;         // lower left (again)
         local_wkt_extent << ")";
+        */
+        GEOSGeometry* geom_extent = OGREnvelope2GEOSGeom(local_extent);
+        string local_wkt_extent = geos.as_string(geom_extent);
+        GEOSGeom_destroy_r(geos.handle(), geom_extent);
 
+#if 0
         #pragma omp critical
         {
             cout << "Thread " << omp_get_thread_num() << " " <<
@@ -125,16 +129,6 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
             cout << "Thread " << omp_get_thread_num() << " -- row: " << row << ", col: " << col << endl;
             cout << "Thread " << omp_get_thread_num() << " " << local_wkt_extent.str() << endl << endl;
         }
-
-#if 0
-        #pragma omp critical
-        cout <<
-            "Local extent for " << omp_get_thread_num() << ": " <<
-            " MinX: " << local_extent.MinX << " "
-            " MaxX: " << local_extent.MaxX << " "
-            " MinY: " << local_extent.MinY << " "
-            " MaxY: " << local_extent.MaxY <<
-            endl;
 #endif
 
         zoneInfo* zone = new zoneInfo(local_extent, 0);
@@ -154,16 +148,20 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
          */
         ostringstream oss;
         oss << "SELECT COUNT(1) FROM way WHERE "
-            << "ST_SetSRID('" << local_wkt_extent.str() << "'::geometry, 4326) ~ line2d";
+            << "ST_SetSRID(ST_GeomFromText('" << local_wkt_extent << "'), 3395) ~ line2d_m";
 
         int nlines = 0;
 
         #pragma omp critical
         {
-            cout << oss.str() << endl;
             PGresult* res = db.query(oss.str().c_str());
             zone->second = atoi(PQgetvalue(res, 0, 0));
-            cout << omp_get_thread_num() << ": got " << nlines << " lines." << endl;
+
+            if (zone->second > 0) {
+                //cout << omp_get_thread_num() << ": " << oss.str() << endl;
+                //cout << omp_get_thread_num() << ": got " << zone->second << " lines." << endl;
+            }
+
             PQclear(res);
         }
 
@@ -175,24 +173,16 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
 
     GEOSFree_r(hdl, hex_extent);
 
-    cout << sum_nb_lines << endl;
-
-    double mean_zone_pop = sum_nb_lines / nThreads;
-
-    if (mean_zone_pop < 4000 || maxdepth == 1) {
+    if (maxdepth == 1) {
         return;
     }
-
-#if 1
-    cout << "Mean number of routes per zone: " << mean_zone_pop << endl;
-#endif
 
     vector<int>                 to_del;
     vector< vector<zoneInfo*> > to_add;
 
     for (int zIdx = 0; zIdx < zones.size(); ++zIdx) {
         zoneInfo* zone = zones[zIdx];
-        if (zone->second > mean_zone_pop) {
+        if (zone->second > 15000) {
             vector<zoneInfo*> subzones;
             GEOSGeometry* g = OGREnvelope2GEOSGeom(zone->first);
             prepare_zones(db, geos, g, subzones, maxdepth-1);
@@ -221,7 +211,7 @@ void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bo
     GDALDataset *zonesDS = shpDriver->Create(filename.c_str(), 0, 0, 0, GDT_Unknown, NULL);
     assert (zonesDS != NULL);
     OGRSpatialReference oSRS;
-    oSRS.SetWellKnownGeogCS( "WGS84" );
+    oSRS.SetWellKnownGeogCS( "EPSG:3395" );
     OGRLayer* z_layer = zonesDS->CreateLayer("zones", &oSRS, wkbPolygon, NULL);
     assert (z_layer != NULL);
 
@@ -268,10 +258,18 @@ void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bo
 GEOSGeometry* world_geom()
 {
     OGREnvelope env;
+
+    #if 0
     env.MinX = -180.;
     env.MaxX = 180.;
     env.MinY = -90.;
     env.MaxY = 90.;
+    #endif // 0
+
+    env.MinX = -20026376.39;
+    env.MaxX = 20026376.39;
+    env.MinY = -15496570.74;
+    env.MaxY = 18764656.23;
 
     return OGREnvelope2GEOSGeom(env);
 
@@ -341,7 +339,7 @@ GEOSGeometry* OGREnvelope2GEOSGeom(const OGREnvelope& env)
 
     assert (polygon != NULL);
 
-    GEOSSetSRID_r(hdl, polygon, 4326);
+    GEOSSetSRID_r(hdl, polygon, 3395);
     return polygon;
 }
 

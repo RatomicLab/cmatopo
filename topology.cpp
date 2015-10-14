@@ -11,6 +11,10 @@
 using namespace std;
 
 const int MAX_INDEX_ELEM = 100000;
+const double DEFAULT_TOLERANCE = 1.;
+
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
 
 namespace cma {
 
@@ -20,6 +24,10 @@ Topology::Topology(GEOSHelper& geos)
 , _faces()
 , _relations()
 , _geos(geos)
+, _edge_idx(new edge_idx_t)
+, _edge_tol_idx(new edge_idx_t)
+, _node_idx(new node_idx_t)
+, _node_tol_idx(new edge_idx_t)
 {
     // edges and nodes cannot have id 0
     _edges.push_back(NULL);
@@ -28,6 +36,11 @@ Topology::Topology(GEOSHelper& geos)
 
 Topology::~Topology()
 {
+    delete _edge_idx;
+    delete _edge_tol_idx;
+    delete _node_idx;
+    delete _node_tol_idx;
+
     delete_all(_nodes);
     delete_all(_edges);
     delete_all(_faces);
@@ -47,8 +60,11 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 
     // 2. Node to edges falling within tolerance distance
     vector<GEOSGeom> nearby;
-    for (edge* e : _edges) {
-        if (!e) continue;
+
+    vector<int> v1;
+    _intersects<edge_idx_t, edge_value>(_edge_tol_idx, noded, v1);
+    for (int _id : v1) {
+        edge* e = _edges[_id];
         if (ST_DWithin(e->geom, noded, tolerance)) {
             nearby.push_back(e->geom);
         }
@@ -75,8 +91,10 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
     }
 
     // 2.1 Node with existing nodes within tolerance
-    for (node* n : _nodes) {
-        if (!n) continue;
+    v1.clear();
+    _intersects<edge_idx_t, edge_value>(_node_tol_idx, noded, v1);
+    for (int _id : v1) {
+        node* n = _nodes[_id];
         if (ST_DWithin(n->geom, noded, tolerance)) {
             nearby.push_back(n->geom);
         }
@@ -208,35 +226,39 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
     GEOSGeometry* geom_env = GEOSEnvelope_r(hdl, geom);
 
-    for (node* n : _nodes) {
-        if (!n) continue;
-        if (n->intersects(geom_env)) {
-            char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
-            assert (relate);
-            assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
-            GEOSFree_r(hdl, relate);
-        }
+    vector<int> nodeIds;
+    _intersects<node_idx_t, node_value>(_node_idx, geom_env, nodeIds);
+    for (int nodeId : nodeIds) {
+        node* n = _nodes[nodeId];
+        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
+        assert (relate);
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
+        GEOSFree_r(hdl, relate);
     }
 
-    for (edge* e : _edges) {
-        if (!e) continue;
-        if (e->intersects(geom_env)) {
-            char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
-            assert (relate);
-            if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
-                GEOSFree_r(hdl, relate);
-                continue;
-            }
+    vector<int> edgeIds;
+    _intersects<edge_idx_t, edge_value>(_edge_idx, geom_env, edgeIds);
+    for (int edgeId : edgeIds) {
+        edge* e = _edges[edgeId];
 
-            assert (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 0);
-            assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
-            assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
-
+        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
+        assert (relate);
+        if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
             GEOSFree_r(hdl, relate);
+            continue;
         }
+
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 0);
+        assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
+
+        if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
+            throw invalid_argument("SQL/MM Spatial exception - geometry crosses a node");
+        }
+
+        GEOSFree_r(hdl, relate);
     }
 
-    GEOSGeom_destroy_r(hdl, geom_env);
+    GEOSGeom_destroy_r(hdl, geom_env); // double-free?
 
     vector<edge*> edgesToStartNode;
     vector<edge*> edgesToEndNode;
@@ -322,7 +344,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
     newEdge->abs_next_left_edge = abs(newEdge->next_left_edge);
     newEdge->abs_next_right_edge = abs(newEdge->next_right_edge);
-    _edges.push_back(newEdge);
+    add_edge(newEdge);
 
     if (abs(newEdge->prev_left_edge) != newEdge->id) {
         if (newEdge->prev_left_edge > 0) {
@@ -420,14 +442,6 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         geometries.size()
     );
 
-    /*
-    GEOSGeometry* shell = GEOSGeom_createPolygon_r(
-        hdl,
-        shell_geoms,
-        NULL,
-        0
-    );
-    */
     GEOSGeometry* shell = GEOSPolygonize_r(hdl, geometries.data(), geometries.size());
 
     GEOSGeometry* forceRHR = ST_ForceRHR(shell);
@@ -440,7 +454,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
 
     if (mbrOnly && faceId != 0) {
         if (isccw) {
-            _faces[faceId]->mbr = GEOSEnvelope_r(hdl, shell);
+            _faces[faceId]->geom = GEOSEnvelope_r(hdl, shell);
         }
 
         GEOSGeom_destroy_r(hdl, shell);
@@ -450,10 +464,10 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
     face* newFace = new face;
     newFace->id = _faces.size();
     if (faceId != 0 && !isccw) {
-        newFace->mbr = GEOSGeom_clone_r(hdl, _faces[faceId]->mbr);
+        newFace->geom = GEOSGeom_clone_r(hdl, _faces[faceId]->geom);
     }
     else {
-        newFace->mbr = GEOSEnvelope_r(hdl, shell);
+        newFace->geom = GEOSEnvelope_r(hdl, shell);
     }
     _faces.push_back(newFace);
 
@@ -636,8 +650,14 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 {
     assert (!_is_null(edgeId) && edgeId < _edges.size());
     assert (acurve != NULL);
-    assert (GEOSGeomTypeId_r(hdl, acurve) == GEOS_LINESTRING);
-    assert (GEOSisSimple_r(hdl, acurve) == 1);
+
+    if (GEOSGeomTypeId_r(hdl, acurve) != GEOS_LINESTRING) {
+        throw invalid_argument("SQL/MM Spatial exception - invalid curve");
+    }
+
+    if (GEOSisSimple_r(hdl, acurve) != 1) {
+        throw invalid_argument("SQL/MM Spatial exception - curve not simple");
+    }
 
     edge* oldEdge = _edges[edgeId];
 
@@ -668,6 +688,10 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     else {
         GEOSGeometry* ep1 = ST_EndPoint(acurve);
         GEOSGeometry* ep2 = ST_EndPoint(oldEdge->geom);
+        // cout << _geos.as_string(ep1) << " ==? " << _geos.as_string(ep2) << endl;
+        if (!ST_Equals(ep1, ep2)) {
+            throw invalid_argument("SQL/MM Spatial exception - end node not geometry end point.");
+        }
         assert (ST_Equals(ep1, ep2));
         GEOSGeom_destroy_r(hdl, ep1);
         GEOSGeom_destroy_r(hdl, ep2);
@@ -756,7 +780,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         }
 
         GEOSGeometry* g = r1;
-        r1 = ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(r1)), 3);
+        r1 = ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(r1)), GEOS_POLYGON);
         GEOSGeom_destroy_r(hdl, g);
 
         GEOSGeometry* r2 = ST_MakeLine(acurve, tmp1);
@@ -817,8 +841,8 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     if (oldEdge->left_face != 0) {
         for (face* f : _faces) {
             if (f->id == oldEdge->left_face) {
-                g = f->mbr;
-                f->mbr = ST_Envelope(ST_GetFaceGeometry(oldEdge->left_face));
+                g = f->geom;
+                f->geom = ST_Envelope(ST_GetFaceGeometry(oldEdge->left_face));
                 if (g) {
                     GEOSGeom_destroy_r(hdl, g);
                 }
@@ -828,8 +852,8 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     if (oldEdge->right_face != 0 && oldEdge->right_face != oldEdge->left_face) {
         for (face* f : _faces) {
             if (f->id == oldEdge->right_face) {
-                g = f->mbr;
-                f->mbr = ST_Envelope(ST_GetFaceGeometry(oldEdge->right_face));
+                g = f->geom;
+                f->geom = ST_Envelope(ST_GetFaceGeometry(oldEdge->right_face));
                 if (g) {
                     GEOSGeom_destroy_r(hdl, g);
                 }
@@ -851,7 +875,10 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
 
     edge* oldEdge = _edges[edgeId];
     assert (oldEdge);
-    assert (GEOSWithin_r(hdl, point, oldEdge->geom) == 1);
+
+    if (GEOSWithin_r(hdl, point, oldEdge->geom) != 1) {
+        throw invalid_argument("SQL/MM Spatial exception - point not on edge");
+    }
 
     const node* coincidentNode = get_node_at(ST_X(point), ST_Y(point));
     assert (!coincidentNode);
@@ -859,7 +886,7 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
     node* newNode = new node();
     newNode->id = _nodes.size();
     newNode->geom = point;
-    _nodes.push_back(newNode);
+    add_node(newNode);
 
     GEOSGeometry* tmp;
 
@@ -884,9 +911,9 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
 
     newEdge->abs_next_left_edge = abs(newEdge->next_left_edge);
     newEdge->abs_next_right_edge = abs(newEdge->next_right_edge);
-    _edges.push_back(newEdge);
+    add_edge(newEdge);
 
-    tmp = newedge1;
+    tmp = oldEdge->geom;
     oldEdge->geom = newedge1;
     GEOSGeom_destroy_r(hdl, tmp);
     oldEdge->next_left_edge = newEdge->id;
@@ -983,7 +1010,7 @@ void Topology::GetNodeEdges(int nodeId, vector<int>& edgeIds)
         return a.first < b.first;
     });
 
-    transform(azs.begin(), azs.end(), edgeIds.begin(), [](const az_edge_pair& a) {
+    transform(azs.begin(), azs.end(), std::back_inserter(edgeIds), [](const az_edge_pair& a) {
         return a.second;
     });
 }
@@ -1030,16 +1057,16 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
         tolerance = _ST_MinTolerance(geom);
     }
 
-    const node* oldNode = closest_and_within(geom, _nodes, tolerance);
+    const node* oldNode = closest_and_within_node(geom, tolerance);
     if (oldNode) {
         return oldNode->id;
     }
 
     int id = -1;
 
-    const edge* oldEdge = closest_and_within(geom, _edges, tolerance);
+    const edge* oldEdge = closest_and_within_edge(geom, tolerance);
     if (oldEdge) {
-        GEOSGeom point = ST_ClosestPoint(geom, oldEdge->geom);
+        GEOSGeom point = ST_ClosestPoint(oldEdge->geom, geom);
 
         if (!ST_Contains(oldEdge->geom, point)) {
             double snaptol = _ST_MinTolerance(point);
@@ -1054,19 +1081,18 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
                 snapedge = ST_MakeLine(sp, snapedge);
             }
 
+            // snapedge must not be destroyed since it gets assigned to oldEdge->geom
             ST_ChangeEdgeGeom(oldEdge->id, snapedge);
 
             GEOSGeom_destroy_r(hdl, sp);
             GEOSGeom_destroy_r(hdl, ep);
-            GEOSGeom_destroy_r(hdl, snapedge);
         }
 
+        // point must not be destroyed as it gets assigned to a new node's geometry
         id = ST_ModEdgeSplit(oldEdge->id, point);
-
-        GEOSGeom_destroy_r(hdl, point);
     }
     else {
-        id = ST_AddIsoNode(geom);
+        id = ST_AddIsoNode(NULLint, geom);
     }
 
     assert (id != -1);
@@ -1078,7 +1104,7 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
  *   FUNCTION topology.ST_AddIsoNode(atopology varchar, aface integer, apoint geometry)
  * Most code pertaining to faces was not ported as we don't need it (yet).
  */
-int Topology::ST_AddIsoNode(const GEOSGeom point)
+int Topology::ST_AddIsoNode(int faceId, const GEOSGeom point)
 {
     assert (point != NULL);
     assert (GEOSGeomTypeId_r(hdl, point) == GEOS_POINT);
@@ -1090,30 +1116,50 @@ int Topology::ST_AddIsoNode(const GEOSGeom point)
         }
     }
 
-    for (edge* e : _edges) {
-        if (!e) continue;
-        if (GEOSIntersects_r(hdl, e->geom, point) == 1) {
-            throw invalid_argument("SQL/MM Spatial exception - edge crosses node.");
-        }
+    vector<int> edgeIds;
+    _intersects<edge_idx_t, edge_value>(_edge_idx, point, edgeIds);
+    if (any_of(edgeIds.begin(), edgeIds.end(), [this, point](int edgeId) {
+        return GEOSIntersects_r(hdl, this->_edges[edgeId]->geom, point) == 1;
+    }))
+    {
+        throw invalid_argument("SQL/MM Spatial exception - edge crosses node.");
     }
 
     int containing_face = NULLint;
     for (face* f : _faces) {
+        if (!f) continue;
+        if (!_is_null(faceId) && faceId != 0 && f->id != faceId) continue;
+
         if (f->id > 0 && f->intersects(point) && ST_Contains(ST_GetFaceGeometry(f->id), point)) {
             containing_face = f->id;
             break;
         }
     }
 
-    if (_is_null(containing_face)) {
-        containing_face = 0;
+    if (!_is_null(faceId)) {
+        if (faceId == 0) {
+            if (!_is_null(containing_face)) {
+                throw invalid_argument("SQL/MM Spatial exception - within face (not universe)");
+            }
+            else {
+                containing_face = 0;
+            }
+        }
+        else {
+            if (_is_null(containing_face) || containing_face != faceId) {
+                throw invalid_argument("SQL/MM Spatial exception - not within face");
+            }
+        }
+    }
+    else {
+        containing_face = _is_null(containing_face) ? 0 : containing_face;
     }
 
     node* newNode = new node;
     newNode->id = _nodes.size();
     newNode->geom = point;
     newNode->containing_face = containing_face;
-    _nodes.push_back(newNode);
+    add_node(newNode);
 
     return newNode->id;
 }
@@ -1126,6 +1172,75 @@ void Topology::output_nodes() const
         if (!n) continue;
         cout << n->id << " | " << n->containing_face << " | " << _geos.as_string(n->geom) << endl;
     }
+}
+
+void Topology::add_edge(edge* e)
+{
+    assert (e);
+    assert (e->id == _edges.size());
+    assert (e->geom);
+    assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
+
+    bg::model::linestring<point> edgeLS;
+
+    double x, y;
+    for (int i = 0; i < GEOSGeomGetNumPoints_r(hdl, e->geom); ++i) {
+        GEOSGeometry* pt = GEOSGeomGetPointN_r(hdl, e->geom, i);
+
+        GEOSGeomGetX_r(hdl, pt, &x);
+        GEOSGeomGetY_r(hdl, pt, &y);
+        edgeLS.push_back(point(x, y));
+
+        GEOSGeom_destroy_r(hdl, pt);
+    }
+
+    bg::model::box<point> bounds;
+    bg::envelope(edgeLS, bounds);
+
+    bg::model::box<point> tolbounds;
+    bg::envelope(edgeLS, tolbounds);
+    point& pt1 = tolbounds.min_corner();
+    point& pt2 = tolbounds.max_corner();
+    bg::set<0>(pt1, bg::get<0>(pt1)-DEFAULT_TOLERANCE/2);
+    bg::set<1>(pt1, bg::get<1>(pt1)-DEFAULT_TOLERANCE/2);
+    bg::set<0>(pt2, bg::get<0>(pt2)+DEFAULT_TOLERANCE/2);
+    bg::set<1>(pt2, bg::get<1>(pt2)+DEFAULT_TOLERANCE/2);
+
+    _edges.push_back(e);
+    _edge_idx->insert(make_pair(bounds, e->id));
+    _edge_tol_idx->insert(make_pair(tolbounds, e->id));
+}
+
+void Topology::add_node(node* n)
+{
+    assert (n);
+    assert (n->geom);
+    assert (n->id == _nodes.size());
+    assert (GEOSGeomTypeId_r(hdl, n->geom) == GEOS_POINT);
+
+    double x, y;
+    GEOSGeomGetX_r(hdl, n->geom, &x);
+    GEOSGeomGetY_r(hdl, n->geom, &y);
+    point pt(x, y);
+
+    // Index the buffer's envelope around the node.
+    // See: www.boost.org/doc/libs/1_59_0/libs/geometry/doc/html/geometry/reference/strategies/strategy_buffer_point_square.html
+    bg::strategy::buffer::point_square point_strategy;
+    bg::strategy::buffer::distance_symmetric<double> distance_strategy(DEFAULT_TOLERANCE/2);    // radius is half the tolerance
+    bg::strategy::buffer::join_round join_strategy;
+    bg::strategy::buffer::end_round end_strategy;
+    bg::strategy::buffer::side_straight side_strategy;
+
+    bg::model::multi_polygon<polygon> result;
+    bg::buffer(pt, result,
+               distance_strategy, side_strategy,
+               join_strategy, end_strategy, point_strategy);
+    box tolbounds;
+    bg::envelope(result, tolbounds);
+
+    _nodes.push_back(n);
+    _node_idx->insert(make_pair(pt, n->id));
+    _node_tol_idx->insert(make_pair(tolbounds, n->id));
 }
 
 void Topology::output_edges() const
@@ -1147,5 +1262,125 @@ void Topology::output_edges() const
              << endl;
     }
 }
+
+/**
+ * Find, if it exists, the node which is the closest to geom within a specified tolerance.
+ */
+const node* Topology::closest_and_within_node(const GEOSGeometry* geom, double tolerance)
+{
+    assert (geom);
+    assert (GEOSGeomTypeId_r(hdl, geom) == GEOS_POINT);
+
+    double x, y;
+    GEOSGeomGetX_r(hdl, geom, &x);
+    GEOSGeomGetY_r(hdl, geom, &y);
+
+    vector<node_value> results_s;
+    _node_idx->query(bgi::nearest(point(x, y), 1), back_inserter(results_s));
+
+    vector<int> nodeIds;
+    if (results_s.size() > 0) {
+        nodeIds.reserve(results_s.size()+1);
+        transform(results_s.begin(), results_s.end(), back_inserter(nodeIds), [](const node_value& a) {
+            return a.second;
+        });
+    }
+
+    // remove nodes not within tolerance
+    nodeIds.erase(remove_if(nodeIds.begin(), nodeIds.end(), [this, geom, tolerance](int nodeId) {
+        return !ST_DWithin(this->_nodes[nodeId]->geom, geom, tolerance);
+    }), nodeIds.end());
+
+    if (nodeIds.size() == 0) {
+        return NULL;
+    }
+
+    if (nodeIds.size() == 1) {
+        return _nodes[nodeIds[0]];
+    }
+
+    // compute distance for remaining nodes
+    vector<double> distances(nodeIds.size()+1);
+    transform(nodeIds.begin(), nodeIds.end(), back_inserter(distances), [this, geom](int nodeId) {
+        return ST_Distance(geom, this->_nodes[nodeId]->geom);
+    });
+
+    // return the node with the smallest distance to geom
+    return _nodes[nodeIds[distance(distances.begin(), min_element(distances.begin(), distances.end()))]];
+}
+
+/**
+ * Find, if it exists, the edge which is the closest to geom within a specified tolerance.
+ */
+const edge* Topology::closest_and_within_edge(const GEOSGeometry* geom, double tolerance)
+{
+    vector<int> edgeIds;
+    _intersects<edge_idx_t, edge_value>(_edge_idx, geom, edgeIds);
+
+    // remove edges not within tolerance
+    edgeIds.erase(remove_if(edgeIds.begin(), edgeIds.end(), [this, geom, tolerance](int edgeId) {
+        return !ST_DWithin(this->_edges[edgeId]->geom, geom, tolerance);
+    }), edgeIds.end());
+
+    if (edgeIds.size() == 0) {
+        return NULL;
+    }
+
+    if (edgeIds.size() == 1) {
+        return _edges[edgeIds[0]];
+    }
+
+    // compute distance for remaining edges
+    vector<double> distances(edgeIds.size()+1);
+    transform(edgeIds.begin(), edgeIds.end(), back_inserter(distances), [this, geom](int edgeId) {
+        return ST_Distance(geom, this->_edges[edgeId]->geom);
+    });
+
+    // return the edge with the smallest distance to geom
+    return _edges[edgeIds[distance(distances.begin(), min_element(distances.begin(), distances.end()))]];
+}
+
+void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls)
+{
+    assert (in);
+    assert (GEOSGeomTypeId_r(hdl, in) == GEOS_MULTILINESTRING);
+    assert (mls.size() == 0);
+
+    double x, y;
+    mls.resize(GEOSGetNumGeometries_r(hdl, in));
+
+    for (int l = 0; l < GEOSGetNumGeometries_r(hdl, in); ++l)
+    {
+        const GEOSGeometry* line = GEOSGetGeometryN_r(hdl, in, l);
+
+        for (int p = 0; p < GEOSGeomGetNumPoints_r(hdl, line); ++p)
+        {
+            GEOSGeometry* pt = GEOSGeomGetPointN_r(hdl, line, p);
+            GEOSGeomGetX_r(hdl, pt, &x);
+            GEOSGeomGetY_r(hdl, pt, &y);
+            GEOSGeom_destroy_r(hdl, pt);
+
+            boost::geometry::append(mls[l], point(x, y));
+        }
+    }
+}
+
+void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls)
+ {
+     assert (in);
+     assert (GEOSGeomTypeId_r(hdl, in) == GEOS_LINESTRING || GEOSGeomTypeId_r(hdl, in) == GEOS_LINEARRING);
+     assert (ls.size() == 0);
+
+     double x, y;
+     for (int i = 0; i < GEOSGeomGetNumPoints_r(hdl, in); ++i) {
+         GEOSGeometry* pt = GEOSGeomGetPointN_r(hdl, in, i);
+
+         GEOSGeomGetX_r(hdl, pt, &x);
+         GEOSGeomGetY_r(hdl, pt, &y);
+         ls.push_back(point(x, y));
+
+         GEOSGeom_destroy_r(hdl, pt);
+     }
+ }
 
 } // namespace cma

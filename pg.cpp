@@ -67,7 +67,7 @@ bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)
 
     char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
     ostringstream oss;
-    oss << "SELECT line2d FROM way WHERE ST_SetSRID('" << hex << "'::geometry, 4326) ~ line2d";
+    oss << "SELECT line2d_m FROM way WHERE ST_SetSRID('" << hex << "'::geometry, 3395) ~ line2d_m order by id";
     GEOSFree_r(hdl, hex);
     GEOSWKTWriter_destroy_r(hdl, wkt_writer);
 
