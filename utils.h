@@ -23,6 +23,8 @@ public:
             wktr = GEOSWKTReader_create_r(hdl);
             wkbw = GEOSWKBWriter_create_r(hdl);
             wktw = GEOSWKTWriter_create_r(hdl);
+
+            GEOSWKTWriter_setRoundingPrecision_r(hdl, wktw, 8);
         }
     }
 
