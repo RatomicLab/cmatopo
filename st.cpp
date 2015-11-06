@@ -254,7 +254,54 @@ GEOSGeom ST_EndPoint(const GEOSGeometry* geom)
 
 GEOSGeom ST_Envelope(const GEOSGeom geom)
 {
-    return GEOSEnvelope_r(hdl, geom);
+    LWGEOM *lwgeom = GEOS2LWGEOM(geom, 0);
+    GBOX box;
+    lwgeom_calculate_gbox(lwgeom, &box);
+
+    if ((box.xmin == box.xmax) && (box.ymin == box.ymax) ||
+        (box.xmin == box.xmax) || (box.ymin == box.ymax))
+    {
+        lwgeom_free(lwgeom);
+        return GEOSEnvelope_r(hdl, geom);
+    }
+
+    // taken from PostGIS: lwgeom_functions_basic.c
+    // we don't use GEOSEnvelope_r to get the same point
+    // order than PostGIS.
+
+    POINT4D pt;
+    LWPOLY *poly;
+    POINTARRAY *pa;
+
+    POINTARRAY **ppa = (POINTARRAY **)lwalloc(sizeof(POINTARRAY*));
+    pa = ptarray_construct_empty(0, 0, 5);
+    ppa[0] = pa;
+
+    /* Assign coordinates to POINT2D array */
+    pt.x = box.xmin;
+    pt.y = box.ymin;
+    ptarray_append_point(pa, &pt, LW_TRUE);
+    pt.x = box.xmin;
+    pt.y = box.ymax;
+    ptarray_append_point(pa, &pt, LW_TRUE);
+    pt.x = box.xmax;
+    pt.y = box.ymax;
+    ptarray_append_point(pa, &pt, LW_TRUE);
+    pt.x = box.xmax;
+    pt.y = box.ymin;
+    ptarray_append_point(pa, &pt, LW_TRUE);
+    pt.x = box.xmin;
+    pt.y = box.ymin;
+    ptarray_append_point(pa, &pt, LW_TRUE);
+
+    /* Construct polygon  */
+    poly = lwpoly_construct(GEOSGetSRID_r(hdl, geom), NULL, 1, ppa);
+    GEOSGeometry* ret = LWGEOM2GEOS(lwpoly_as_lwgeom(poly));
+    lwpoly_free(poly);
+    lwgeom_free(lwgeom);
+
+    return ret;
+    // return GEOSEnvelope_r(hdl, geom);
 }
 
 /**
@@ -280,16 +327,35 @@ GEOSGeom ST_ForceRHR(const GEOSGeom geom)
  */
 GEOSGeom ST_MakeLine(const GEOSGeom g1, const GEOSGeom g2)
 {
-    LWGEOM* lwgeoms[2];
-    lwgeoms[0] = GEOS2LWGEOM(g1, 0);
-    lwgeoms[1] = GEOS2LWGEOM(g2, 0);
+    vector<const GEOSGeometry*> geometries;
+    geometries.push_back(g1);
+    geometries.push_back(g2);
 
-    LWLINE* outline = lwline_from_lwgeom_array(lwgeoms[0]->srid, 2, lwgeoms);
+    return ST_MakeLine(geometries);
+}
 
-    GEOSGeom ret = LWGEOM2GEOS((LWGEOM *)outline);
+GEOSGeometry* ST_MakeLine(const std::vector<const GEOSGeometry*>& geometries)
+{
+    assert (geometries.size() > 0);
 
-    lwgeom_free(lwgeoms[0]);
-    lwgeom_free(lwgeoms[1]);
+    LWGEOM** lwgeoms = new LWGEOM*[geometries.size()];
+
+    int i = 0;
+    for (const GEOSGeometry* g : geometries) {
+        int t = GEOSGeomTypeId_r(hdl ,g);
+        assert (t == GEOS_POINT || t == GEOS_LINESTRING || t == GEOS_LINEARRING);
+        lwgeoms[i++] = GEOS2LWGEOM(g, 0);
+    }
+
+    LWLINE* outline = lwline_from_lwgeom_array(lwgeoms[0]->srid, geometries.size(), lwgeoms);
+
+    GEOSGeometry* ret = LWGEOM2GEOS((LWGEOM *)outline);
+
+    for (i = 0; i < geometries.size(); ++i) {
+        lwgeom_free(lwgeoms[i]);
+    }
+
+    delete [] lwgeoms;
 
     return ret;
 }
@@ -430,23 +496,7 @@ GEOSGeom ST_MakePolygon(const GEOSGeom geom)
  */
 GEOSGeom ST_ClosestPoint(const GEOSGeom g1, const GEOSGeom g2)
 {
-    LWGEOM* point;
-    LWGEOM* lwgeom1 = GEOS2LWGEOM(g1, 0);
-    LWGEOM* lwgeom2 = GEOS2LWGEOM(g2, 0);
-
-    point = lw_dist2d_distancepoint(lwgeom1, lwgeom2, lwgeom1->srid, DIST_MIN);
-
-    if (lwgeom_is_empty(point)) {
-        return NULL;
-    }
-
-    GEOSGeom ret = LWGEOM2GEOS(point);
-
-    lwgeom_free(point);
-    lwgeom_free(lwgeom1);
-    lwgeom_free(lwgeom2);
-
-    return ret;
+    return GEOSInterpolate_r(hdl, g1, GEOSProject_r(hdl, g1, g2));
 }
 
 /**

@@ -87,9 +87,11 @@ public:
 
     void add_edge(edge* e);
     void add_node(node* n);
+    void add_face(face* f);
 
     void output_nodes() const;
     void output_edges() const;
+    void output_faces() const;
 
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);
@@ -122,6 +124,11 @@ private:
      * edge_idx_t* is not a typo, we store boxes.
      */
     edge_idx_t* _node_tol_idx = NULL;
+
+    /**
+     * Total linestrings that were added to this topology.
+     */
+    uint64_t _totalCount = 0;
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;

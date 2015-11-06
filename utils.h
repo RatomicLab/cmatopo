@@ -59,6 +59,7 @@ public:
 
     std::string as_string(const GEOSGeometry* geom) {
         assert (geom);
+        // GEOSWKTWriter_setRoundingPrecision_r(hdl, text_writer(), 15);
         char* wkt_c = GEOSWKTWriter_write_r(hdl, text_writer(), geom);
         std::string wkt(wkt_c);
         GEOSFree_r(hdl, wkt_c);

@@ -37,6 +37,7 @@ GEOSGeom ST_EndPoint(const GEOSGeometry* geom);
 GEOSGeom ST_Envelope(const GEOSGeom geom);
 GEOSGeom ST_ForceRHR(const GEOSGeom geom);
 GEOSGeom ST_MakeLine(const GEOSGeom g1, const GEOSGeom g2);
+GEOSGeometry* ST_MakeLine(const std::vector<const GEOSGeometry*>& geometries);
 GEOSGeom ST_SetPoint(const GEOSGeometry* line, int index, const GEOSGeometry* point);
 GEOSGeom ST_BuildArea(const GEOSGeom geom);
 GEOSGeom ST_GeometryN(const GEOSGeom geom, int index);
