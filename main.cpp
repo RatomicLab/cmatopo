@@ -1,3 +1,5 @@
+#include <ctime>
+#include <chrono>
 #include <cassert>
 #include <iostream>
 
@@ -38,32 +40,40 @@ int main(int argc, char **argv)
     }
 
     GEOSGeometry* world_extent = world_geom();
-    // GEOSGeometry* env = GEOSEnvelope_r(hdl, world_extent);
-    // cout << env << endl;
-    // env = GEOSEnvelope_r(hdl, world_extent);
-    // cout << env << endl << GEOSEnvelope_r(hdl, world_extent) << endl;
-    //
-    // return 0;
 
     std::vector<zoneInfo*> zones;
     prepare_zones(db, geos, world_extent, zones, 10);
     GEOSGeom_destroy_r(hdl, world_extent);
     // write_zones("output/test.shp", zones, true);
 
-    Topology* topology = new Topology(geos);
+    sort(zones.begin(), zones.end(), [](zoneInfo* a, zoneInfo* b) {
+        return a->second > b->second;
+    });
 
+    int zc = 0;
     for (zoneInfo* zone : zones) {
         if (zone->second == 0) {
             continue;
         }
+
+        ++zc;
+
+        if (zone->second > 5000) continue;
+
+        chrono::time_point<chrono::system_clock> start, end;
+        start = chrono::system_clock::now();
+
+        Topology* topology = new Topology(geos);
 
         linesV lines;
         if (!db.get_lines_within(zone->first, lines)) {
             assert (false);
         }
 
-        assert (lines.size() > 0);
+        assert (zone->second == lines.size());
+        cout << lines.size() << endl;
 
+        int lc = 0;
         for (GEOSGeometry* line : lines) {
             vector<int> edgeIds;
             try {
@@ -72,13 +82,26 @@ int main(int argc, char **argv)
             catch (const invalid_argument& ex) {
                 cerr << geos.as_string(line) << ": " << ex.what() << endl;
             }
+
+            if (++lc % 100 == 0) {
+                cout << lc << endl;
+            }
         }
+
+        end = chrono::system_clock::now();
+        chrono::duration<double> elapsed_seconds = end-start;
+        time_t end_time = chrono::system_clock::to_time_t(end);
 
         topology->output_nodes();
         topology->output_edges();
-    }
+        topology->output_faces();
 
-    delete topology;
+        cout << "finished computation at " << std::ctime(&end_time)
+             << "elapsed time: " << elapsed_seconds.count() << "s\n";
+
+        delete topology;
+        break;
+    }
 
     finishGEOS();
 
