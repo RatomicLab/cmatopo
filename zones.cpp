@@ -59,7 +59,7 @@ void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, doub
 }
 
 // void prepare_zones(const linesV& lines, const OGREnvelope& extent, vector<zoneInfo*>& zones, int maxdepth)
-void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo*>& zones, int maxdepth)
+void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo*>& zones, int maxdepth)
 {
     assert (extent);
     assert (maxdepth >= 1);
@@ -93,6 +93,8 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
 
     #pragma omp parallel reduction(+:sum_nb_lines)
     {
+        PG db("postgresql://postgres@localhost/postgis");
+
         int row = int(floor(omp_get_thread_num() / cols));
         int col = omp_get_thread_num() % cols;
 
@@ -152,18 +154,15 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
 
         int nlines = 0;
 
-        #pragma omp critical
-        {
-            PGresult* res = db.query(oss.str().c_str());
-            zone->second = atoi(PQgetvalue(res, 0, 0));
+        PGresult* res = db.query(oss.str().c_str());
+        zone->second = atoi(PQgetvalue(res, 0, 0));
 
-            if (zone->second > 0) {
-                //cout << omp_get_thread_num() << ": " << oss.str() << endl;
-                //cout << omp_get_thread_num() << ": got " << zone->second << " lines." << endl;
-            }
-
-            PQclear(res);
+        if (zone->second > 0) {
+            //cout << omp_get_thread_num() << ": " << oss.str() << endl;
+            //cout << omp_get_thread_num() << ": got " << zone->second << " lines." << endl;
         }
+
+        PQclear(res);
 
         sum_nb_lines += zone->second;
 
@@ -185,7 +184,7 @@ void prepare_zones(PG& db, GEOSHelper& geos, const GEOSGeometry* extent, vector<
         if (zone->second > 15000) {
             vector<zoneInfo*> subzones;
             GEOSGeometry* g = OGREnvelope2GEOSGeom(zone->first);
-            prepare_zones(db, geos, g, subzones, maxdepth-1);
+            prepare_zones(geos, g, subzones, maxdepth-1);
             GEOSGeom_destroy_r(hdl, g);
 
             to_del.insert(to_del.begin(), zIdx);

@@ -14,7 +14,7 @@ program_LIBRARY_DIRS := /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/
 program_LIBRARY_DIRS += /usr/local/lib
 
 
-program_LIBRARIES := mpfr boost_serialization-mt boost_filesystem-mt boost_system-mt boost_mpi-mt lwgeom geos_c
+program_LIBRARIES := mpfr boost_serialization-mt boost_filesystem-mt boost_system-mt boost_mpi-mt mpi lwgeom geos_c
 
 CPPFLAGS =  -g -openmp -O3 -std=c++11 `gdal-config --cflags` `geos-config --cflags`
 #CPPFLAGS =  -g -openmp -O0 -std=c++11 `gdal-config --cflags` `geos-config --cflags`

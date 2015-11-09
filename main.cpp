@@ -11,8 +11,17 @@
 #include <zones.h>
 #include <topology.h>
 
+#include <boost/mpi/collectives.hpp>
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/list.hpp>
+#include <boost/serialization/string.hpp>
+
 using namespace cma;
 using namespace std;
+
+using namespace boost::mpi;
 
 const double DEFAULT_TOLERANCE = 1.;
 
@@ -22,14 +31,14 @@ namespace cma {
 
 int main(int argc, char **argv)
 {
+    environment env;
+    communicator world;
+
     initGEOS(geos_message_function, geos_message_function);
     OGRRegisterAll();
 
     GEOSHelper geos = GEOSHelper();
     assert (hdl != NULL);
-
-    GEOSWKBReader* wkbr = geos.reader();
-    assert (wkbr != NULL);
 
     // vm with Quebec only: postgresql://postgres@192.168.56.101/postgis
     // vm with the world: postgresql://pgsql@pg/cmdb
@@ -39,39 +48,85 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    GEOSGeometry* world_extent = world_geom();
+    vector<int>* zonesPerProcess = new vector<int>(world.size());
+    vector< list< pair<int, string> > >* processZones =
+        new vector< list< pair<int, string> > >(world.size());
 
-    std::vector<zoneInfo*> zones;
-    prepare_zones(db, geos, world_extent, zones, 10);
-    GEOSGeom_destroy_r(hdl, world_extent);
-    // write_zones("output/test.shp", zones, true);
+    assert (zonesPerProcess->size() == processZones->size());
 
-    sort(zones.begin(), zones.end(), [](zoneInfo* a, zoneInfo* b) {
-        return a->second > b->second;
-    });
+    for (int i = 0; i < zonesPerProcess->size(); ++i) {
+        (*zonesPerProcess)[i] = 0;
+    }
 
-    int zc = 0;
-    for (zoneInfo* zone : zones) {
-        if (zone->second == 0) {
-            continue;
+    if (world.rank() == 0) {
+        std::vector<zoneInfo*> zones;
+
+        GEOSGeometry* world_extent = world_geom();
+        prepare_zones(geos, world_extent, zones, 10);
+        GEOSGeom_destroy_r(hdl, world_extent);
+        // write_zones("output/test.shp", zones, true);
+
+        sort(zones.begin(), zones.end(), [](zoneInfo* a, zoneInfo* b) {
+            return a->second > b->second;
+        });
+
+        int zoneId = 0;
+        for (const zoneInfo* z : zones) {
+            int minProcess = distance(
+                zonesPerProcess->begin(),
+                min_element(
+                    zonesPerProcess->begin(),
+                    zonesPerProcess->end()
+                )
+            );
+            assert (minProcess < zonesPerProcess->size());
+            (*zonesPerProcess)[minProcess] += z->second;
+
+            GEOSGeometry* zoneGeom = OGREnvelope2GEOSGeom(z->first);
+            (*processZones)[minProcess].push_back(
+                make_pair(zoneId++, geos.as_string(zoneGeom))
+            );
+            GEOSGeom_destroy_r(hdl, zoneGeom);
         }
 
-        ++zc;
+        for (int i = 0; i < zonesPerProcess->size(); ++i) {
+            cout << "[0] Process " << i << " will process " << (*zonesPerProcess)[i]
+                 << " lines." << endl;
+        }
+    }
 
-        if (zone->second > 5000) continue;
+    list< pair<int, string> > myZones;
+    scatter(world, *processZones, myZones, 0);
+
+    processZones->clear();
+    zonesPerProcess->clear();
+
+    delete processZones;
+    delete zonesPerProcess;
+
+    for (auto& zone : myZones) {
+        int zoneId = zone.first;
+        const string& hexWKT = zone.second;
 
         chrono::time_point<chrono::system_clock> start, end;
         start = chrono::system_clock::now();
 
-        Topology* topology = new Topology(geos);
+        GEOSGeometry* zoneGeom =
+            GEOSWKTReader_read_r(hdl, geos.text_reader(), hexWKT.c_str());
 
         linesV lines;
-        if (!db.get_lines_within(zone->first, lines)) {
+        if (!db.get_lines_within(zoneGeom, lines)) {
             assert (false);
         }
 
-        assert (zone->second == lines.size());
-        cout << lines.size() << endl;
+        cout << "[" << world.rank() << "] processing zone #" <<  zoneId
+             << " (" << lines.size() << " lines)";
+
+        if (lines.size() == 0) {
+            continue;
+        }
+
+        Topology* topology = new Topology(geos);
 
         int lc = 0;
         for (GEOSGeometry* line : lines) {
@@ -96,41 +151,14 @@ int main(int argc, char **argv)
         topology->output_edges();
         topology->output_faces();
 
-        cout << "finished computation at " << std::ctime(&end_time)
-             << "elapsed time: " << elapsed_seconds.count() << "s\n";
+        cout << "[" << world.rank() << "] finished computation of zone #" << zoneId
+             << " at " << std::ctime(&end_time) << ","
+             << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
 
         delete topology;
-        break;
     }
 
     finishGEOS();
 
     return 0;
-
-    int count = 0;
-    PGresult* res = db.query("SELECT line from way;", true);
-    while (res != NULL && !PQgetisnull(res, 0, 0)) {
-        ++count;
-
-        char* line = PQgetvalue(res, 0, 0);
-
-        GEOSGeometry* geom = GEOSWKBReader_readHEX_r(hdl, wkbr, (unsigned char*)line, strlen(line));
-        if (!geom) {
-            cerr << "Invalid geometry received." << endl;
-            return 1;
-        }
-
-        if (GEOSGeomTypeId_r(hdl, geom) != GEOS_LINESTRING) {
-            char* geom_type = GEOSGeomType_r(hdl, geom);
-            cerr << "Skipping invalid geometry of type " << geom_type << endl;
-            GEOSFree_r(hdl, geom_type);
-        }
-
-        GEOSGeom_destroy_r(hdl, geom);
-
-        PQclear(res);
-        res = db.next_result();
-    }
-
-    cout << count << endl;
 }
