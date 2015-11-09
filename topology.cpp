@@ -207,7 +207,10 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     assert (!_is_null(start_node) && start_node < _nodes.size());
     assert (!_is_null(end_node) && end_node < _nodes.size());
     assert (geom && GEOSGeomTypeId_r(hdl, geom) == GEOS_LINESTRING);
-    assert (GEOSisSimple_r(hdl, geom) == 1);
+
+    if (GEOSisSimple_r(hdl, geom) != 1) {
+        throw invalid_argument("SQL/MM Spatial exception - curve not simple");
+    }
 
     //cout << "ST_AddEdgeModFace(" << start_node << ", " << end_node << ", "
     //     << _geos.as_string(geom) << ")" << endl;
