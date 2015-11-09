@@ -23,6 +23,7 @@ public:
     /**
      * Below are some geometry helpers.
      */
+    bool get_lines_within(const GEOSGeometry* envelope, linesV& lines);
     bool get_lines_within(OGREnvelope& envelope, linesV& lines);
 
 private:

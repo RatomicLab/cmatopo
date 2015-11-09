@@ -63,11 +63,18 @@ bool PG::success(PGresult* res) const
 bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)
 {
     GEOSGeometry* geom = OGREnvelope2GEOSGeom(envelope);
+    bool ret = get_lines_within(geom, lines);
+    GEOSGeom_destroy_r(hdl, geom);
+}
+
+bool PG::get_lines_within(const GEOSGeometry* geom, linesV& lines)
+{
     GEOSWKTWriter* wkt_writer = GEOSWKTWriter_create_r(hdl);
 
     char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
     ostringstream oss;
     oss << "SELECT line2d_m FROM way WHERE ST_SetSRID('" << hex << "'::geometry, 3395) ~ line2d_m order by id";
+    cout << oss.str() << endl;
     GEOSFree_r(hdl, hex);
     GEOSWKTWriter_destroy_r(hdl, wkt_writer);
 
@@ -89,7 +96,6 @@ bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)
     GEOSWKBReader_destroy_r(hdl, wkb_reader);
 
     PQclear(res);
-    GEOSGeom_destroy_r(hdl, geom);
 
     return true;
 }
