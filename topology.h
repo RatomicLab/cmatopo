@@ -1,7 +1,9 @@
 #ifndef __CMA_TOPOLOGY_H
 #define __CMA_TOPOLOGY_H
 
+#include <set>
 #include <limits>
+#include <memory>
 #include <vector>
 #include <geos_c.h>
 #include <algorithm>
@@ -129,6 +131,24 @@ private:
      * Total linestrings that were added to this topology.
      */
     uint64_t _totalCount = 0;
+
+    typedef std::set<edge*> edge_set;
+    typedef std::unique_ptr<edge_set> edge_set_ptr;
+
+    /**
+     * Index of edges left faces.
+     */
+    std::vector<edge_set_ptr>* _left_faces_idx = nullptr;
+
+    /**
+     * Index of edges right faces
+     */
+    std::vector<edge_set_ptr>* _right_faces_idx = nullptr;
+
+    void _update_left_face(edge* e, int faceId);
+    void _update_right_face(edge* e, int faceId);
+
+    void _face_edges(int faceId, edge_set& edges);
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;
