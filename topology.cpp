@@ -281,7 +281,8 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     vector<edge*>* edgesToStartNode = new vector<edge*>();
     vector<edge*>* edgesToEndNode = new vector<edge*>();
 
-    for (const edge* e : _edges) {
+    for (const edge* e : _edges)
+    {
         if (!e) continue;
 
         edge* ne;

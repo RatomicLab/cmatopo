@@ -207,7 +207,7 @@ GEOSGeom ST_Collect(GEOSGeometry* g1, GEOSGeometry* g2)
  * Mostly equivalent to the following function (postgis/lwgeom_functions_basic.c):
  *   Datum LWGEOM_reverse(PG_FUNCTION_ARGS)
  */
-GEOSGeom ST_Reverse(const GEOSGeom geom)
+GEOSGeometry* ST_Reverse(const GEOSGeometry* geom)
 {
     LWGEOM* lwgeom = GEOS2LWGEOM(geom, 0);
     lwgeom_reverse(lwgeom);

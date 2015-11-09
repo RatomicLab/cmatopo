@@ -31,7 +31,7 @@ GEOSGeom ST_Snap(const GEOSGeom g1, const GEOSGeom g2, double tolerance);
 GEOSGeom ST_Split(const GEOSGeometry* in, const GEOSGeometry* blade_in);
 GEOSGeom ST_PointN(const GEOSGeometry* line, int index);
 GEOSGeom ST_Collect(GEOSGeometry* g1, GEOSGeometry* g2 = NULL);
-GEOSGeom ST_Reverse(const GEOSGeom geom);
+GEOSGeometry* ST_Reverse(const GEOSGeometry* geom);
 GEOSGeom ST_AddPoint(GEOSGeometry* line, GEOSGeometry* pt, int where = -1);
 GEOSGeom ST_EndPoint(const GEOSGeometry* geom);
 GEOSGeom ST_Envelope(const GEOSGeom geom);
