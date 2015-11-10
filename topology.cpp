@@ -449,14 +449,6 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     delete edgesToStartNode;
     delete edgesToEndNode;
 
-    if (newEdge->left_face != newEdge->right_face) {
-        output_nodes();
-        output_edges();
-        output_faces();
-        cerr << "Failed while inserting line #" << _totalCount << endl;
-        exit(1);
-    }
-
     assert (newEdge->left_face == newEdge->right_face);
     assert (!_is_null(newEdge->left_face));
 
@@ -465,11 +457,33 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     if (abs(newEdge->prev_left_edge) != newEdge->id) {
         if (newEdge->prev_left_edge > 0) {
             edge* e = _edges[newEdge->prev_left_edge];
+
+            // for rollbacks
+            _updated_edges->push_back(
+                ue_t(
+                    e->id,
+                    false,
+                    e->next_left_edge,
+                    e->abs_next_left_edge
+                )
+            );
+
             e->next_left_edge = newEdge->id;
             e->abs_next_left_edge = newEdge->id;
         }
         else {
             edge* e = _edges[-newEdge->prev_left_edge];
+
+            // for rollbacks
+            _updated_edges->push_back(
+                ue_t(
+                    e->id,
+                    true,
+                    e->next_right_edge,
+                    e->abs_next_right_edge
+                )
+            );
+
             e->next_right_edge = newEdge->id;
             e->abs_next_right_edge = newEdge->id;
         }
@@ -478,11 +492,33 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     if (abs(newEdge->prev_right_edge) != newEdge->id) {
         if (newEdge->prev_right_edge > 0) {
             edge* e = _edges[newEdge->prev_right_edge];
+
+            // for rollbacks
+            _updated_edges->push_back(
+                ue_t(
+                    e->id,
+                    false,
+                    e->next_left_edge,
+                    e->abs_next_left_edge
+                )
+            );
+
             e->next_left_edge = -newEdge->id;
             e->abs_next_left_edge = newEdge->id;
         }
         else {
             edge* e = _edges[-newEdge->prev_right_edge];
+
+            // for rollbacks
+            _updated_edges->push_back(
+                ue_t(
+                    e->id,
+                    true,
+                    e->next_right_edge,
+                    e->abs_next_right_edge
+                )
+            );
+
             e->next_right_edge = -newEdge->id;
             e->abs_next_right_edge = newEdge->id;
         }
@@ -1096,6 +1132,7 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
                         e->abs_next_right_edge
                     )
                 );
+
                 e->next_right_edge = -newEdge->id;
                 e->abs_next_right_edge = newEdge->id;
             }
@@ -1109,6 +1146,7 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
                         e->abs_next_left_edge
                     )
                 );
+
                 e->next_left_edge = -newEdge->id;
                 e->abs_next_left_edge = newEdge->id;
             }
