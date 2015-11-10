@@ -12,7 +12,6 @@
 using namespace std;
 
 const int MAX_INDEX_ELEM = 100000;
-const double DEFAULT_TOLERANCE = 1.;
 
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;

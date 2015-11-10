@@ -17,6 +17,8 @@
 #include <types.h>
 #include <utils.h>
 
+#define DEFAULT_TOLERANCE 1.0
+
 namespace cma {
 
 /**
@@ -214,8 +216,16 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
         double x, y;
         GEOSGeomGetX_r(hdl, geom, &x);
         GEOSGeomGetY_r(hdl, geom, &y);
-        point pt(x, y);
-        index->query(boost::geometry::index::intersects(pt), back_inserter(results_s));
+
+        box env;
+        boost::geometry::envelope(ls, env);
+
+        env.min_corner().x(x - DEFAULT_TOLERANCE/2);
+        env.min_corner().y(y - DEFAULT_TOLERANCE/2);
+        env.max_corner().x(x + DEFAULT_TOLERANCE/2);
+        env.max_corner().y(x + DEFAULT_TOLERANCE/2);
+
+        index->query(boost::geometry::index::intersects(env), back_inserter(results_s));
         break;
     }
     case GEOS_LINESTRING:
@@ -227,7 +237,16 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
 
         linestring ls;
         GEOM2BOOSTLS(g, ls);
-        index->query(boost::geometry::index::intersects(ls), back_inserter(results_s));
+
+        box env;
+        boost::geometry::envelope(ls, env);
+
+        env.min_corner().x(env.min_corner().x() - DEFAULT_TOLERANCE/2);
+        env.min_corner().y(env.min_corner().y() - DEFAULT_TOLERANCE/2);
+        env.max_corner().x(env.max_corner().x() + DEFAULT_TOLERANCE/2);
+        env.max_corner().y(env.max_corner().y() + DEFAULT_TOLERANCE/2);
+
+        index->query(boost::geometry::index::intersects(env), back_inserter(results_s));
 
         break;
     }

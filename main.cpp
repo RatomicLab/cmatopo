@@ -23,8 +23,6 @@ using namespace std;
 
 using namespace boost::mpi;
 
-const double DEFAULT_TOLERANCE = 1.;
-
 namespace cma {
     GEOSContextHandle_t hdl;
 }
