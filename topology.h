@@ -112,12 +112,15 @@ private:
      */
     typedef boost::tuples::tuple<int, int, int, int, GEOSGeometry*> ule_t;
     typedef boost::tuples::tuple<int, bool, int, int> ue_t;
+    typedef boost::tuples::tuple<int, bool, int> uef_t;
     std::vector<int>* _inserted_nodes = nullptr;
     std::vector<int>* _inserted_edges = nullptr;
     std::vector<int>* _inserted_faces = nullptr;
     std::vector< std::pair<int, GEOSGeometry*> >* _updated_faces = nullptr;
     std::vector<ule_t>* _updated_left_edges = nullptr;
     std::vector<ue_t>* _updated_edges = nullptr;
+    std::vector< std::pair<int, int> >* _updated_containing_faces = nullptr;
+    std::vector< uef_t >* _updated_edges_face = nullptr;
 
     /**
      * GEOS helper class.

@@ -53,6 +53,8 @@ Topology::Topology(GEOSHelper& geos)
 , _updated_faces(new vector< pair<int, GEOSGeometry*> >())
 , _updated_left_edges(new vector<ule_t>())
 , _updated_edges(new vector<ue_t>())
+, _updated_containing_faces(new vector< pair<int, int> >())
+, _updated_edges_face(new vector< uef_t >())
 {
     // edges and nodes cannot have id 0
     _edges.push_back(NULL);
@@ -92,6 +94,8 @@ Topology::~Topology()
     delete _updated_faces;
     delete _updated_left_edges;
     delete _updated_edges;
+    delete _updated_containing_faces;
+    delete _updated_edges_face;
 
     delete_all(_nodes);
     delete_all(_edges);
@@ -1601,6 +1605,8 @@ void Topology::commit()
     _updated_left_edges->clear();
 
     _updated_edges->clear();
+    _updated_containing_faces->clear();
+    _updated_edges_face->clear();
 
     _inserted_nodes->clear();
     _inserted_edges->clear();
@@ -1646,6 +1652,23 @@ void Topology::rollback()
         }
     }
     _updated_edges->clear();
+
+    for (auto& p : *_updated_containing_faces) {
+        int nodeId = p.first;
+        _nodes[nodeId]->containing_face = p.second;
+    }
+    _updated_containing_faces->clear();
+
+    for (auto& t : *_updated_edges_face) {
+        int edgeId = t.get<0>();
+        if (t.get<1>()) {
+            _edges[edgeId]->right_face = t.get<2>();
+        }
+        else {
+            _edges[edgeId]->left_face = t.get<2>();
+        }
+    }
+    _updated_edges_face->clear();
 
     /**
      * delete all nodes, edges and faces we added since
@@ -1784,6 +1807,16 @@ void Topology::_update_left_face(edge* e, int faceId)
 {
     size_t nelem = (*_left_faces_idx)[e->left_face]->erase(e);
     assert (nelem == 1);
+
+    // for rollbacks
+    _updated_edges_face->push_back(
+        uef_t(
+            e->id,
+            false,
+            e->left_face
+        )
+    );
+
     e->left_face = faceId;
     (*_left_faces_idx)[faceId]->insert(e);
 }
@@ -1792,6 +1825,16 @@ void Topology::_update_right_face(edge* e, int faceId)
 {
     size_t nelem = (*_right_faces_idx)[e->right_face]->erase(e);
     assert (nelem == 1);
+
+    // for rollbacks
+    _updated_edges_face->push_back(
+        uef_t(
+            e->id,
+            true,
+            e->right_face
+        )
+    );
+
     e->right_face = faceId;
     (*_right_faces_idx)[faceId]->insert(e);
 }
