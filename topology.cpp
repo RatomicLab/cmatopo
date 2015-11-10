@@ -1155,14 +1155,6 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
     assert (faceId > 0 && faceId < _faces.size());
 
     vector<GEOSGeom> geoms;
-    /*
-    for (edge* e : _edges) {
-        if (!e) continue;
-        if (e->left_face == faceId || e->right_face == faceId) {
-            geoms.push_back(GEOSGeom_clone_r(hdl, e->geom));
-        }
-    }
-    */
 
     for (const edge* e : *(*_left_faces_idx)[faceId]) {
         geoms.push_back(GEOSGeom_clone_r(hdl, e->geom));
@@ -1274,12 +1266,11 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom point)
 
         GEOSGeometry* facegeom = ST_GetFaceGeometry(f->id);
         if (facegeom && f->intersects(point) && ST_Contains(facegeom, point)) {
+            GEOSGeom_destroy_r(hdl, facegeom);
             containing_face = f->id;
             break;
         }
-        if (facegeom) {
-            GEOSGeom_destroy_r(hdl, facegeom);
-        }
+        GEOSGeom_destroy_r(hdl, facegeom);
     }
 
     if (!_is_null(faceId)) {
