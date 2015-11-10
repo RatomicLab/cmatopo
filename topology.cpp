@@ -603,6 +603,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
 
     if (mbrOnly && faceId != 0) {
         if (isccw) {
+            _transactions->push_back(new FaceTransation(*this, _faces[faceId]));
             _faces[faceId]->geom = ST_Envelope(shell_geoms);
         }
 
@@ -987,6 +988,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     _ST_AdjacentEdges(oldEdge->end_node, -edgeId, preEndEdgeIds);
 
     GEOSGeometry* g = _edges[edgeId]->geom;
+    _transactions->push_back(new EdgeTransaction(*this, _edges[edgeId]));
     _edges[edgeId]->geom = acurve;
     assert (g);
     GEOSGeom_destroy_r(hdl, g);
