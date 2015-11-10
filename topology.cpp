@@ -592,12 +592,6 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
     edge_set faceEdges;
     _face_edges(faceId, faceEdges);
 
-    /*
-    for (edge* e : _edges) {
-        if (!e) continue;
-        if ((e->left_face == faceId || e->right_face == faceId) &&
-            !_is_in(e->id, absNewRingEdges))
-    */
     for (edge* e : faceEdges) {
         if (!_is_in(e->id, absNewRingEdges))
         {
@@ -1049,27 +1043,6 @@ void Topology::_ST_AdjacentEdges(int nodeId, int edgeId, vector<int>& edgeIds)
 {
     vector<int> edgeStar;
     GetNodeEdges(nodeId, edgeStar);
-
-/*
-BEGIN
-  WITH edgestar AS (
-    SELECT *, count(*) over () AS cnt
-    FROM topology.GetNodeEdges(atopology, anode)
-  )
-  SELECT ARRAY[ (
-      SELECT p.edge AS prev FROM edgestar p
-      WHERE p.sequence = CASE WHEN m.sequence-1 < 1 THEN cnt
-                         ELSE m.sequence-1 END
-    ), (
-      SELECT p.edge AS prev FROM edgestar p WHERE p.sequence = ((m.sequence)%cnt)+1
-    ) ]
-  FROM edgestar m
-  WHERE edge = anedge
-  INTO ret;
-
-  RETURN ret;
-END
-*/
 
     int psequence;
     int msequence = 0;
