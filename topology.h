@@ -163,7 +163,7 @@ private:
     void _find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_t& pan, bool span, edge* newEdge, bool isclosed);
 
     template <class IndexType, class Value>
-    void _intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& ids);
+    void _intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& ids, double tolerance = 0.);
 };
 
 /**
@@ -203,7 +203,7 @@ void Topology::delete_all(std::vector<T*>& v) {
  * Return all items intersecting with geom in the given index.
  */
 template <class IndexType, class Value>
-void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& edgeIds) {
+void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& edgeIds, double tolerance) {
     assert (index);
     assert (geom);
     assert (edgeIds.size() == 0);
@@ -217,15 +217,21 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
         GEOSGeomGetX_r(hdl, geom, &x);
         GEOSGeomGetY_r(hdl, geom, &y);
 
-        box env;
-        boost::geometry::envelope(ls, env);
+        if (tolerance == 0.) {
+            point pt(x, y);            
+            index->query(boost::geometry::index::intersects(pt), back_inserter(results_s));
+        }
+        else {
+            box env;
 
-        env.min_corner().x(x - DEFAULT_TOLERANCE/2);
-        env.min_corner().y(y - DEFAULT_TOLERANCE/2);
-        env.max_corner().x(x + DEFAULT_TOLERANCE/2);
-        env.max_corner().y(x + DEFAULT_TOLERANCE/2);
+            env.min_corner().x(x - tolerance/2);
+            env.min_corner().y(y - tolerance/2);
+            env.max_corner().x(x + tolerance/2);
+            env.max_corner().y(x + tolerance/2);
 
-        index->query(boost::geometry::index::intersects(env), back_inserter(results_s));
+            index->query(boost::geometry::index::intersects(env), back_inserter(results_s));
+        }
+
         break;
     }
     case GEOS_LINESTRING:
@@ -241,10 +247,12 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
         box env;
         boost::geometry::envelope(ls, env);
 
-        env.min_corner().x(env.min_corner().x() - DEFAULT_TOLERANCE/2);
-        env.min_corner().y(env.min_corner().y() - DEFAULT_TOLERANCE/2);
-        env.max_corner().x(env.max_corner().x() + DEFAULT_TOLERANCE/2);
-        env.max_corner().y(env.max_corner().y() + DEFAULT_TOLERANCE/2);
+        if (tolerance > 0.) {
+            env.min_corner().x(env.min_corner().x() - tolerance/2);
+            env.min_corner().y(env.min_corner().y() - tolerance/2);
+            env.max_corner().x(env.max_corner().x() + tolerance/2);
+            env.max_corner().y(env.max_corner().y() + tolerance/2);
+        }
 
         index->query(boost::geometry::index::intersects(env), back_inserter(results_s));
 

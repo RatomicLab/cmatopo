@@ -246,7 +246,13 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
                 newEdge->right_face = n->containing_face;
             }
             else {
-                assert (newEdge->left_face == n->containing_face);
+                if (newEdge->left_face != n->containing_face) {
+                    ostringstream oss;
+                    oss << "SQL/MM Spatial exception - geometry crosses an edge "
+                        << "(endnodes in faces " << newEdge->left_face << " and "
+                        << n->containing_face << ")";
+                    throw invalid_argument(oss.str());
+                }
             }
         }
     }
@@ -259,41 +265,53 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     assert (end_node_geom);
     assert (ST_Equals(end_node_geom, ST_EndPoint(geom)));
 
-    GEOSGeometry* geom_env = GEOSEnvelope_r(hdl, geom);
-
     vector<int> nodeIds;
-    _intersects<node_idx_t, node_value>(_node_idx, geom_env, nodeIds);
+    _intersects<node_idx_t, node_value>(_node_idx, geom, nodeIds);
     for (int nodeId : nodeIds) {
         node* n = _nodes[nodeId];
         char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
-        assert (relate);
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 0);
+        if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
+            GEOSFree_r(hdl, relate);
+            throw invalid_argument("SQL/MM Spatial exception - geometry crosses a node");
+        }
         GEOSFree_r(hdl, relate);
     }
 
     vector<int> edgeIds;
-    _intersects<edge_idx_t, edge_value>(_edge_idx, geom_env, edgeIds);
+    _intersects<edge_idx_t, edge_value>(_edge_idx, geom, edgeIds);
     for (int edgeId : edgeIds) {
         edge* e = _edges[edgeId];
 
         char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
-        assert (relate);
+
         if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
             GEOSFree_r(hdl, relate);
             continue;
         }
 
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 0);
-        assert (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 0);
+        if (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 1) {
+            GEOSFree_r(hdl, relate);
+            ostringstream oss;
+            oss << "SQL/MM Spatial exception - coincident edge " << edgeId;
+            throw invalid_argument(oss.str());
+        }
+
+        if (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 1) {
+            GEOSFree_r(hdl, relate);
+            ostringstream oss;
+            oss << "Spatial exception - geometry intersects edge " << edgeId;
+            throw invalid_argument(oss.str());
+        }
 
         if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
-            throw invalid_argument("SQL/MM Spatial exception - geometry crosses a node");
+            GEOSFree_r(hdl, relate);
+            ostringstream oss;
+            oss << "SQL/MM Spatial exception - geometry crosses edge " << edgeId;
+            throw invalid_argument(oss.str());
         }
 
         GEOSFree_r(hdl, relate);
     }
-
-    GEOSGeom_destroy_r(hdl, geom_env); // double-free?
 
     vector<edge*>* edgesToStartNode = new vector<edge*>();
     vector<edge*>* edgesToEndNode = new vector<edge*>();
@@ -796,52 +814,63 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         GEOSGeom_destroy_r(hdl, ep2);
     }
 
-    /* below are just sanity checks, TODO later.
-    string relate;
-    for (node* n : _nodes) {
-        if (n->id == oldEdge->start_node || n->id == oldEdge->end_node) continue;
+    vector<int> nodeIds;
+    _intersects<node_idx_t, node_value>(_node_idx, acurve, nodeIds);
+    for (int _id : nodeIds) {
+        if (_id == oldEdge->start_node || _id == oldEdge->end_node) {
+            continue;
+        }
 
-        relate.clear();
-        ST_relate(n->geom, acurve, 2, relate);
-        assert (!ST_relatematch(relate, "T********"));
+        node* n = _nodes[_id];
+        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, acurve, GEOSRELATE_BNR_ENDPOINT);
+
+        if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
+            GEOSFree_r(hdl, relate);
+            throw invalid_argument("SQL/MM Spatial exception - geometry crosses a node");
+        }
+
+        GEOSFree_r(hdl, relate);
     }
 
-  --
-  -- h) Check if this geometry has any interaction with any existing edge
-  --
-  sql := 'SELECT edge_id, ST_Relate(geom,'
-    || quote_literal(acurve::text)
-    || '::geometry, 2) as im FROM '
-    || quote_ident(atopology)
-    || '.edge_data WHERE edge_id != ' || anedge || ' AND geom && '
-    || quote_literal(acurve::text) || '::geometry';
-  FOR rec IN EXECUTE sql LOOP -- {
+    vector<int> edgeIds;
+    _intersects<edge_idx_t, edge_value>(_edge_idx, acurve, edgeIds);
+    for (int _id : edgeIds) {
+        if (_id == edgeId) {
+            continue;
+        }
 
-    --RAISE DEBUG 'IM=%',rec.im;
+        edge* e = _edges[_id];
 
-    IF ST_RelateMatch(rec.im, 'F********') THEN
-      CONTINUE; -- no interior-interior intersection
-    END IF;
+        char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, acurve, GEOSRELATE_BNR_ENDPOINT);
 
-    IF ST_RelateMatch(rec.im, '1FFF*FFF2') THEN
-      RAISE EXCEPTION
-        'SQL/MM Spatial exception - coincident edge %', rec.edge_id;
-    END IF;
+        if (GEOSRelatePatternMatch_r(hdl, relate, "F********") == 1) {
+            GEOSFree_r(hdl, relate);
+            continue;
+        }
 
+        if (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 1) {
+            GEOSFree_r(hdl, relate);
+            ostringstream oss;
+            oss << "SQL/MM Spatial exception - coincident edge " << _id;
+            throw invalid_argument(oss.str());
+        }
 
-    -- NOT IN THE SPECS: geometry touches an edge
-    IF ST_RelateMatch(rec.im, '1********') THEN
-      RAISE EXCEPTION
-        'Spatial exception - geometry intersects edge %', rec.edge_id;
-    END IF;
+        if (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 1) {
+            GEOSFree_r(hdl, relate);
+            ostringstream oss;
+            oss << "Spatial exception - geometry intersects edge " << _id;
+            throw invalid_argument(oss.str());
+        }
 
-    IF ST_RelateMatch(rec.im, 'T********') THEN
-      RAISE EXCEPTION
-        'SQL/MM Spatial exception - geometry crosses edge %', rec.edge_id;
-    END IF;
+        if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
+            GEOSFree_r(hdl, relate);
+            ostringstream oss;
+            oss << "SQL/MM Spatial exception - geometry crosses a edge " << _id;
+            throw invalid_argument(oss.str());
+        }
 
-  END LOOP; -- }
-    */
+        GEOSFree_r(hdl, relate);
+    }
 
     vector<GEOSGeometry*> rng_info;
 
