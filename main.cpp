@@ -131,9 +131,11 @@ int main(int argc, char **argv)
             vector<int> edgeIds;
             try {
                 topology->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+                topology->commit();
             }
             catch (const invalid_argument& ex) {
                 cerr << geos.as_string(line) << ": " << ex.what() << endl;
+                topology->rollback();
             }
 
             if (++lc % 100 == 0) {

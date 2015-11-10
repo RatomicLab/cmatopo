@@ -8,6 +8,8 @@
 #include <geos_c.h>
 #include <algorithm>
 
+#include <boost/tuple/tuple.hpp>
+
 #include <boost/geometry.hpp>
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/geometry/geometries/point_xy.hpp>
@@ -89,9 +91,8 @@ public:
     GEOSGeom ST_GetFaceGeometry(int faceId);
     int ST_AddIsoNode(int faceId, const GEOSGeom point);
 
-    void add_edge(edge* e);
-    void add_node(node* n);
-    void add_face(face* f);
+    void commit();
+    void rollback();
 
     void output_nodes() const;
     void output_edges() const;
@@ -106,6 +107,21 @@ private:
     std::vector<face*> _faces;
     std::vector<relation*> _relations;
 
+    /**
+     * Rollback data members
+     */
+    typedef boost::tuples::tuple<int, int, int, int, GEOSGeometry*> ule_t;
+    typedef boost::tuples::tuple<int, bool, int, int> ue_t;
+    std::vector<int>* _inserted_nodes = nullptr;
+    std::vector<int>* _inserted_edges = nullptr;
+    std::vector<int>* _inserted_faces = nullptr;
+    std::vector< std::pair<int, GEOSGeometry*> >* _updated_faces = nullptr;
+    std::vector<ule_t>* _updated_left_edges = nullptr;
+    std::vector<ue_t>* _updated_edges = nullptr;
+
+    /**
+     * GEOS helper class.
+     */
     GEOSHelper& _geos;
 
     /**
@@ -146,6 +162,14 @@ private:
      * Index of edges right faces
      */
     std::vector<edge_set_ptr>* _right_faces_idx = nullptr;
+
+    void add_edge(edge* e);
+    void add_node(node* n);
+    void add_face(face* f);
+
+    void remove_edge(int edgeId);
+    void remove_node(int nodeId);
+    void remove_face(int faceId);
 
     void _update_left_face(edge* e, int faceId);
     void _update_right_face(edge* e, int faceId);
@@ -218,7 +242,7 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
         GEOSGeomGetY_r(hdl, geom, &y);
 
         if (tolerance == 0.) {
-            point pt(x, y);            
+            point pt(x, y);
             index->query(boost::geometry::index::intersects(pt), back_inserter(results_s));
         }
         else {

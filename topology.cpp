@@ -18,6 +18,23 @@ namespace bgi = boost::geometry::index;
 
 namespace cma {
 
+/**
+ * Used for generic lookups by item id in our
+ * boost indexes.
+ */
+struct item_finder_predicate
+{
+    int _itemId;
+    item_finder_predicate(int itemId) {
+        _itemId = itemId;
+    }
+
+    template <typename Value>
+    bool operator()(const Value& v) const {
+        return v.second == _itemId;
+    }
+};
+
 Topology::Topology(GEOSHelper& geos)
 : _nodes()
 , _edges()
@@ -30,6 +47,12 @@ Topology::Topology(GEOSHelper& geos)
 , _node_tol_idx(new edge_idx_t)
 , _left_faces_idx(new vector<edge_set_ptr>())
 , _right_faces_idx(new vector<edge_set_ptr>())
+, _inserted_nodes(new vector<int>())
+, _inserted_edges(new vector<int>())
+, _inserted_faces(new vector<int>())
+, _updated_faces(new vector< pair<int, GEOSGeometry*> >())
+, _updated_left_edges(new vector<ule_t>())
+, _updated_edges(new vector<ue_t>())
 {
     // edges and nodes cannot have id 0
     _edges.push_back(NULL);
@@ -46,6 +69,8 @@ Topology::Topology(GEOSHelper& geos)
 
 Topology::~Topology()
 {
+    commit();
+
     delete _edge_idx;
     delete _edge_tol_idx;
     delete _node_idx;
@@ -60,6 +85,13 @@ Topology::~Topology()
         _right_faces_idx->clear();
         delete _right_faces_idx;
     }
+
+    delete _inserted_nodes;
+    delete _inserted_edges;
+    delete _inserted_faces;
+    delete _updated_faces;
+    delete _updated_left_edges;
+    delete _updated_edges;
 
     delete_all(_nodes);
     delete_all(_edges);
@@ -967,20 +999,20 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 
     if (oldEdge->left_face != 0) {
         face* f = _faces[oldEdge->left_face];
-        g = f->geom;
-        f->geom = ST_Envelope(ST_GetFaceGeometry(oldEdge->left_face));
-        if (g) {
-            GEOSGeom_destroy_r(hdl, g);
-        }
+        _updated_faces->push_back(make_pair(f->id, f->geom));
+
+        GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->left_face);
+        f->geom = ST_Envelope(faceGeom);
+        GEOSGeom_destroy_r(hdl, faceGeom);
     }
 
     if (oldEdge->right_face != 0 && oldEdge->right_face != oldEdge->left_face) {
         face* f = _faces[oldEdge->right_face];
-        g = f->geom;
-        f->geom = ST_Envelope(ST_GetFaceGeometry(oldEdge->right_face));
-        if (g) {
-            GEOSGeom_destroy_r(hdl, g);
-        }
+        _updated_faces->push_back(make_pair(f->id, f->geom));
+
+        GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->right_face);
+        f->geom = ST_Envelope(faceGeom);
+        GEOSGeom_destroy_r(hdl, faceGeom);
     }
 
     return edgeId;
@@ -1035,9 +1067,18 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
 
     add_edge(newEdge);
 
-    tmp = oldEdge->geom;
+    // for rollbacks
+    _updated_left_edges->push_back(
+        ule_t(
+            oldEdge->id,
+            oldEdge->next_left_edge,
+            oldEdge->abs_next_left_edge,
+            oldEdge->end_node,
+            oldEdge->geom
+        )
+    );
+
     oldEdge->geom = newedge1;
-    GEOSGeom_destroy_r(hdl, tmp);
     oldEdge->next_left_edge = newEdge->id;
     oldEdge->abs_next_left_edge = newEdge->id;
     oldEdge->end_node = newNode->id;
@@ -1046,10 +1087,28 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
         if (!e) continue;
         if (e->id != newEdge->id) {
             if (e->next_right_edge == -edgeId && e->start_node == oeEndNode) {
+                // for rollbacks
+                _updated_edges->push_back(
+                    ue_t(
+                        e->id,
+                        true,
+                        e->next_right_edge,
+                        e->abs_next_right_edge
+                    )
+                );
                 e->next_right_edge = -newEdge->id;
                 e->abs_next_right_edge = newEdge->id;
             }
             if (e->next_left_edge == -edgeId && e->end_node == oeEndNode) {
+                // for rollbacks
+                _updated_edges->push_back(
+                    ue_t(
+                        e->id,
+                        false,
+                        e->next_left_edge,
+                        e->abs_next_left_edge
+                    )
+                );
                 e->next_left_edge = -newEdge->id;
                 e->abs_next_left_edge = newEdge->id;
             }
@@ -1375,6 +1434,8 @@ void Topology::add_edge(edge* e)
 
     assert (e->right_face < _right_faces_idx->size());
     (*_right_faces_idx)[e->right_face]->insert(e);
+
+    _inserted_edges->push_back(e->id);
 }
 
 void Topology::add_node(node* n)
@@ -1407,6 +1468,8 @@ void Topology::add_node(node* n)
     _nodes.push_back(n);
     _node_idx->insert(make_pair(pt, n->id));
     _node_tol_idx->insert(make_pair(tolbounds, n->id));
+
+    _inserted_nodes->push_back(n->id);
 }
 
 void Topology::add_face(face* f)
@@ -1421,6 +1484,149 @@ void Topology::add_face(face* f)
     if (_left_faces_idx->size() < _faces.size()) {
         _left_faces_idx->push_back(edge_set_ptr(new edge_set));
         _right_faces_idx->push_back(edge_set_ptr(new edge_set));
+    }
+
+    _inserted_faces->push_back(f->id);
+}
+
+void Topology::remove_edge(int edgeId)
+{
+    assert (edgeId == _edges.size()-1);
+
+    edge* e = _edges[edgeId];
+
+    vector<edge_value> results;
+    _edge_idx->query(
+        bgi::satisfies(item_finder_predicate(edgeId)),
+        back_inserter(results));
+    assert (results.size() == 1);
+    _edge_idx->remove(results[0]);
+
+    results.clear();
+    _edge_tol_idx->query(
+        bgi::satisfies(item_finder_predicate(edgeId)),
+        back_inserter(results));
+    assert (results.size() == 1);
+    _edge_tol_idx->remove(results[0]);
+
+    (*_left_faces_idx)[e->left_face]->erase(e);
+    (*_right_faces_idx)[e->right_face]->erase(e);
+
+    _edges.pop_back();
+    delete e;
+}
+
+void Topology::remove_node(int nodeId)
+{
+    assert (nodeId == _nodes.size()-1);
+
+    node* n = _nodes[nodeId];
+
+    vector<node_value> results;
+    _node_idx->query(
+        bgi::satisfies(item_finder_predicate(nodeId)),
+        back_inserter(results));
+    assert (results.size() == 1);
+    _node_idx->remove(results[0]);
+
+    vector<edge_value> results2;
+    _node_tol_idx->query(
+        bgi::satisfies(item_finder_predicate(nodeId)),
+        back_inserter(results2));
+    assert (results2.size() == 1);
+    _node_tol_idx->remove(results2[0]);
+
+    _nodes.pop_back();
+    delete n;
+}
+
+void Topology::remove_face(int faceId)
+{
+    assert (faceId == _faces.size()-1);
+
+    face* f = _faces[faceId];
+
+    _faces.pop_back();
+    delete f;
+}
+
+void Topology::commit()
+{
+    for (auto& face_update : *_updated_faces) {
+        GEOSGeom_destroy_r(hdl, face_update.second);
+    }
+    _updated_faces->clear();
+
+    for (ule_t& t : *_updated_left_edges) {
+        GEOSGeom_destroy_r(hdl, t.get<4>());
+    }
+    _updated_left_edges->clear();
+
+    _updated_edges->clear();
+
+    _inserted_nodes->clear();
+    _inserted_edges->clear();
+    _inserted_faces->clear();
+}
+
+void Topology::rollback()
+{
+    // revert face geometry updates
+    for (auto& face_update : *_updated_faces) {
+        int faceId = face_update.first;
+        assert (faceId < _faces.size());
+
+        GEOSGeometry* geom = _faces[faceId]->geom;
+        GEOSGeometry* oldGeom = face_update.second;
+        _faces[faceId]->geom = oldGeom;
+        GEOSGeom_destroy_r(hdl, geom);
+    }
+    _updated_faces->clear();
+
+    for (auto& t : *_updated_left_edges) {
+        int edgeId = t.get<0>();
+        GEOSGeometry* g = _edges[edgeId]->geom;
+
+        _edges[edgeId]->next_left_edge = t.get<1>();
+        _edges[edgeId]->abs_next_left_edge = t.get<2>();
+        _edges[edgeId]->end_node = t.get<3>();
+        _edges[edgeId]->geom = t.get<4>();
+
+        GEOSGeom_destroy_r(hdl, g);
+    }
+    _updated_left_edges->clear();
+
+    for (auto& t : *_updated_edges) {
+        int edgeId = t.get<0>();
+        if (t.get<1>()) {
+            _edges[edgeId]->next_right_edge = t.get<2>();
+            _edges[edgeId]->abs_next_right_edge = t.get<3>();
+        }
+        else {
+            _edges[edgeId]->next_left_edge = t.get<2>();
+            _edges[edgeId]->abs_next_left_edge = t.get<3>();
+        }
+    }
+    _updated_edges->clear();
+
+    /**
+     * delete all nodes, edges and faces we added since
+     * the last commit.
+     */
+
+    auto nItr = _inserted_nodes->rbegin();
+    for (; nItr < _inserted_nodes->rend(); ++nItr) {
+        remove_node(*nItr);
+    }
+
+    auto eItr = _inserted_edges->rbegin();
+    for (; eItr < _inserted_edges->rend(); ++eItr) {
+        remove_edge(*eItr);
+    }
+
+    auto fItr = _inserted_faces->rbegin();
+    for (; fItr < _inserted_faces->rend(); ++fItr) {
+        remove_face(*fItr);
     }
 }
 
