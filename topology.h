@@ -55,11 +55,12 @@ typedef boost::geometry::model::multi_linestring<linestring> multi_linestring;
 
 class Topology
 {
-    friend class FaceTransation;
+    friend class FaceTransaction;
     friend class EdgeTransaction;
     friend class NodeTransaction;
     friend class TopologyTransaction;
     friend class AddFaceIndexTransaction;
+    friend class RemoveFaceIndexTransaction;
 
 public:
     Topology(GEOSHelper& geos);
@@ -156,12 +157,12 @@ private:
     /**
      * Index of edges left faces.
      */
-    std::vector<edge_set_ptr>* _left_faces_idx = nullptr;
+    std::vector<edgeid_set_ptr>* _left_faces_idx = nullptr;
 
     /**
      * Index of edges right faces
      */
-    std::vector<edge_set_ptr>* _right_faces_idx = nullptr;
+    std::vector<edgeid_set_ptr>* _right_faces_idx = nullptr;
 
     /**
      * Temporary vector for ST_GetFaceGeometry operations.
@@ -179,7 +180,7 @@ private:
     void _update_left_face(edge* e, int faceId);
     void _update_right_face(edge* e, int faceId);
 
-    void _face_edges(int faceId, edge_set& edges);
+    void _face_edges(int faceId, edgeid_set& edges);
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;

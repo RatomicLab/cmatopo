@@ -115,8 +115,8 @@ typedef struct {
     int element_type = NULLint;
 } relation;
 
-typedef std::set<edge*> edge_set;
-typedef std::shared_ptr<edge_set> edge_set_ptr;
+typedef std::set<int> edgeid_set;
+typedef std::shared_ptr<edgeid_set> edgeid_set_ptr;
 
 } // namespace cma
 
