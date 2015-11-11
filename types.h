@@ -1,8 +1,10 @@
 #ifndef __CMA_TYPES_H
 #define __CMA_TYPES_H
 
+#include <set>
 #include <limits>
 #include <vector>
+#include <memory>
 
 #include <geos_c.h>
 #include <ogrsf_frmts.h>
@@ -112,6 +114,9 @@ typedef struct {
     int element_id = NULLint;
     int element_type = NULLint;
 } relation;
+
+typedef std::set<edge*> edge_set;
+typedef std::shared_ptr<edge_set> edge_set_ptr;
 
 } // namespace cma
 

@@ -1,7 +1,6 @@
 #ifndef __CMA_TOPOLOGY_H
 #define __CMA_TOPOLOGY_H
 
-#include <set>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -60,6 +59,7 @@ class Topology
     friend class EdgeTransaction;
     friend class NodeTransaction;
     friend class TopologyTransaction;
+    friend class AddFaceIndexTransaction;
 
 public:
     Topology(GEOSHelper& geos);
@@ -121,6 +121,7 @@ private:
     std::vector<int>* _inserted_edges = nullptr;
     std::vector<int>* _inserted_faces = nullptr;
 
+
     /**
      * GEOS helper class.
      */
@@ -152,9 +153,6 @@ private:
      */
     uint64_t _totalCount = 0;
 
-    typedef std::set<edge*> edge_set;
-    typedef std::unique_ptr<edge_set> edge_set_ptr;
-
     /**
      * Index of edges left faces.
      */
@@ -164,6 +162,11 @@ private:
      * Index of edges right faces
      */
     std::vector<edge_set_ptr>* _right_faces_idx = nullptr;
+
+    /**
+     * Temporary vector for ST_GetFaceGeometry operations.
+     */
+    std::vector<GEOSGeometry*>* _gfg_geometries = nullptr;
 
     void add_edge(edge* e);
     void add_node(node* n);

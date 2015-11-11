@@ -41,6 +41,9 @@ Topology::Topology(GEOSHelper& geos)
 , _faces()
 , _relations()
 , _transactions(new vector<TopologyTransaction*>())
+, _inserted_nodes(new vector<int>())
+, _inserted_edges(new vector<int>())
+, _inserted_faces(new vector<int>())
 , _geos(geos)
 , _edge_idx(new edge_idx_t)
 , _edge_tol_idx(new edge_idx_t)
@@ -48,9 +51,7 @@ Topology::Topology(GEOSHelper& geos)
 , _node_tol_idx(new edge_idx_t)
 , _left_faces_idx(new vector<edge_set_ptr>())
 , _right_faces_idx(new vector<edge_set_ptr>())
-, _inserted_nodes(new vector<int>())
-, _inserted_edges(new vector<int>())
-, _inserted_faces(new vector<int>())
+, _gfg_geometries(new vector<GEOSGeometry*>())
 {
     // edges and nodes cannot have id 0
     _edges.push_back(NULL);
@@ -1194,25 +1195,26 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
     // face 0 is invalid (universal face)
     assert (faceId > 0 && faceId < _faces.size());
 
-    vector<GEOSGeom> geoms;
-
     for (const edge* e : *(*_left_faces_idx)[faceId]) {
-        geoms.push_back(GEOSGeom_clone_r(hdl, e->geom));
+        _gfg_geometries->push_back(GEOSGeom_clone_r(hdl, e->geom));
     }
 
     for (const edge* e : *(*_right_faces_idx)[faceId]) {
-        geoms.push_back(GEOSGeom_clone_r(hdl, e->geom));
+        _gfg_geometries->push_back(GEOSGeom_clone_r(hdl, e->geom));
     }
 
     GEOSGeom coll = GEOSGeom_createCollection_r(
         hdl,
         GEOS_MULTILINESTRING,
-        geoms.data(),
-        geoms.size()
+        _gfg_geometries->data(),
+        _gfg_geometries->size()
     );
 
     GEOSGeom ret = ST_BuildArea(coll);
+
     GEOSGeom_destroy_r(hdl, coll);
+    _gfg_geometries->clear();
+
     return ret;
 }
 
@@ -1692,6 +1694,12 @@ void Topology::_update_left_face(edge* e, int faceId)
     assert (nelem == 1);
 
     _transactions->push_back(new EdgeTransaction(*this, e));
+    _transactions->push_back(new AddFaceIndexTransaction(
+        *this,
+        _left_faces_idx,
+        faceId,
+        e
+    ));
 
     e->left_face = faceId;
     (*_left_faces_idx)[faceId]->insert(e);
@@ -1703,6 +1711,12 @@ void Topology::_update_right_face(edge* e, int faceId)
     assert (nelem == 1);
 
     _transactions->push_back(new EdgeTransaction(*this, e));
+    _transactions->push_back(new AddFaceIndexTransaction(
+        *this,
+        _right_faces_idx,
+        faceId,
+        e
+    ));
 
     e->right_face = faceId;
     (*_right_faces_idx)[faceId]->insert(e);
