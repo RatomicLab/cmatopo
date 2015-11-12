@@ -307,6 +307,9 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         GEOSFree_r(hdl, relate);
     }
 
+    // reserve next edge_id
+    _edges.push_back(nullptr);
+
     vector<int> edgeIds;
     _intersects<edge_idx_t, edge_value>(_edge_idx, geom, edgeIds);
     for (int edgeId : edgeIds) {
@@ -1381,7 +1384,7 @@ void Topology::output_faces() const
 void Topology::add_edge(edge* e)
 {
     assert (e);
-    assert (e->id == _edges.size());
+    assert (e->id == _edges.size() || e->id == _edges.size()-1);
     assert (e->geom);
     assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
 
@@ -1413,7 +1416,14 @@ void Topology::add_edge(edge* e)
     bg::set<0>(pt2, bg::get<0>(pt2)+DEFAULT_TOLERANCE/2);
     bg::set<1>(pt2, bg::get<1>(pt2)+DEFAULT_TOLERANCE/2);
 
-    _edges.push_back(e);
+    if (e->id == _edges.size()) {
+        _edges.push_back(e);
+    }
+    else {
+        assert (_edges[e->id] == nullptr);
+        _edges[e->id] = e;
+    }
+
     _edge_idx->insert(make_pair(bounds, e->id));
     _edge_tol_idx->insert(make_pair(tolbounds, e->id));
 
@@ -1491,8 +1501,6 @@ void Topology::add_face(face* f)
 
 void Topology::remove_edge(int edgeId)
 {
-    assert (edgeId == _edges.size()-1);
-
     edge* e = _edges[edgeId];
 
     vector<edge_value> results;
@@ -1509,17 +1517,12 @@ void Topology::remove_edge(int edgeId)
     assert (results.size() == 1);
     _edge_tol_idx->remove(results[0]);
 
-    (*_left_faces_idx)[e->left_face]->erase(e->id);
-    (*_right_faces_idx)[e->right_face]->erase(e->id);
-
-    _edges.pop_back();
+    _edges[edgeId] = nullptr;
     delete e;
 }
 
 void Topology::remove_node(int nodeId)
 {
-    assert (nodeId == _nodes.size()-1);
-
     node* n = _nodes[nodeId];
 
     vector<node_value> results;
@@ -1536,17 +1539,14 @@ void Topology::remove_node(int nodeId)
     assert (results2.size() == 1);
     _node_tol_idx->remove(results2[0]);
 
-    _nodes.pop_back();
+    _nodes[nodeId] = nullptr;
     delete n;
 }
 
 void Topology::remove_face(int faceId)
 {
-    assert (faceId == _faces.size()-1);
-
     face* f = _faces[faceId];
-
-    _faces.pop_back();
+    _faces[faceId] = nullptr;
     delete f;
 }
 
@@ -1591,6 +1591,10 @@ void Topology::rollback()
     for (; fItr < _inserted_faces->rend(); ++fItr) {
         remove_face(*fItr);
     }
+
+    _inserted_nodes->clear();
+    _inserted_edges->clear();
+    _inserted_faces->clear();
 }
 
 void Topology::output_edges() const
