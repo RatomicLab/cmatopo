@@ -29,7 +29,7 @@ PG::~PG()
 
 bool PG::connected() const
 {
-    return _conn != NULL;
+    return _conn != NULL && PQstatus(_conn) == CONNECTION_OK;
 }
 
 PGresult* PG::query(const std::string& sql, bool single_row_mode)
