@@ -1770,6 +1770,35 @@ void Topology::_face_edges(int faceId, edgeid_set& edges)
     );
 }
 
+void Topology::_empty(bool free_items)
+{
+    assert (_transactions->empty());
+
+    if (free_items) {
+        delete_all(_nodes);
+        delete_all(_edges);
+        delete_all(_faces);
+        delete_all(_relations);
+    }
+    else {
+        _nodes.clear();
+        _edges.clear();
+        _faces.clear();
+        _relations.clear();
+    }
+
+    _edge_idx->clear();
+    _edge_tol_idx->clear();
+
+    _node_idx->clear();
+    _node_tol_idx->clear();
+
+    _totalCount = 0;
+
+    _left_faces_idx->clear();
+    _right_faces_idx->clear();
+}
+
 void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls)
 {
     assert (in);

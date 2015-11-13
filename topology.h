@@ -62,6 +62,8 @@ class Topology
     friend class AddFaceIndexTransaction;
     friend class RemoveFaceIndexTransaction;
 
+    friend void merge_topologies(Topology&, Topology&);
+
 public:
     Topology(GEOSHelper& geos);
     ~Topology();
@@ -181,6 +183,8 @@ private:
     void _update_right_face(edge* e, int faceId);
 
     void _face_edges(int faceId, edgeid_set& edges);
+
+    void _empty(bool free_items=true);
 
     template<class T>
     bool _is_in(T hay, const std::vector<T>& stack) const;
