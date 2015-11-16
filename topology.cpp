@@ -1374,6 +1374,7 @@ void Topology::output_faces() const
     cout << "face count: " << _faces.size() << endl;
     cout << "face_id | mbr (as text)" << endl;
     for (const face* f : _faces) {
+        if (!f) continue;
         cout << f->id << " | " << (f->geom ? _geos.as_string(f->geom) : "") << endl;
         fs <<  f->id << "|" << (f->geom ? _geos.as_string(f->geom) : "") << endl;
     }
@@ -1387,6 +1388,7 @@ void Topology::add_edge(edge* e)
     assert (e->id == _edges.size() || e->id == _edges.size()-1);
     assert (e->geom);
     assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
+    assert (_edges.size() < 100000);
 
     e->abs_next_left_edge = abs(e->next_left_edge);
     e->abs_next_right_edge = abs(e->next_right_edge);
@@ -1411,10 +1413,10 @@ void Topology::add_edge(edge* e)
     bg::envelope(edgeLS, tolbounds);
     point& pt1 = tolbounds.min_corner();
     point& pt2 = tolbounds.max_corner();
-    bg::set<0>(pt1, bg::get<0>(pt1)-DEFAULT_TOLERANCE/2);
-    bg::set<1>(pt1, bg::get<1>(pt1)-DEFAULT_TOLERANCE/2);
-    bg::set<0>(pt2, bg::get<0>(pt2)+DEFAULT_TOLERANCE/2);
-    bg::set<1>(pt2, bg::get<1>(pt2)+DEFAULT_TOLERANCE/2);
+    bg::set<0>(pt1, bg::get<0>(pt1)-DEFAULT_TOLERANCE);
+    bg::set<1>(pt1, bg::get<1>(pt1)-DEFAULT_TOLERANCE);
+    bg::set<0>(pt2, bg::get<0>(pt2)+DEFAULT_TOLERANCE);
+    bg::set<1>(pt2, bg::get<1>(pt2)+DEFAULT_TOLERANCE);
 
     if (e->id == _edges.size()) {
         _edges.push_back(e);
@@ -1463,7 +1465,7 @@ void Topology::add_node(node* n)
     // Index the buffer's envelope around the node.
     // See: www.boost.org/doc/libs/1_59_0/libs/geometry/doc/html/geometry/reference/strategies/strategy_buffer_point_square.html
     bg::strategy::buffer::point_square point_strategy;
-    bg::strategy::buffer::distance_symmetric<double> distance_strategy(DEFAULT_TOLERANCE/2);    // radius is half the tolerance
+    bg::strategy::buffer::distance_symmetric<double> distance_strategy(DEFAULT_TOLERANCE);    // radius is half the tolerance
     bg::strategy::buffer::join_round join_strategy;
     bg::strategy::buffer::end_round end_strategy;
     bg::strategy::buffer::side_straight side_strategy;
@@ -1684,7 +1686,7 @@ const node* Topology::closest_and_within_node(const GEOSGeometry* geom, double t
 const edge* Topology::closest_and_within_edge(const GEOSGeometry* geom, double tolerance)
 {
     vector<int> edgeIds;
-    _intersects<edge_idx_t, edge_value>(_edge_idx, geom, edgeIds);
+    _intersects<edge_idx_t, edge_value>(_edge_tol_idx, geom, edgeIds);
 
     // remove edges not within tolerance
     edgeIds.erase(remove_if(edgeIds.begin(), edgeIds.end(), [this, geom, tolerance](int edgeId) {
