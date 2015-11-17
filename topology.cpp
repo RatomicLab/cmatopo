@@ -307,9 +307,6 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         GEOSFree_r(hdl, relate);
     }
 
-    // reserve next edge_id
-    _edges.push_back(nullptr);
-
     vector<int> edgeIds;
     _intersects<edge_idx_t, edge_value>(_edge_idx, geom, edgeIds);
     for (int edgeId : edgeIds) {
@@ -345,6 +342,9 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
         GEOSFree_r(hdl, relate);
     }
+
+    // reserve next edge_id
+    _edges.push_back(nullptr);
 
     vector<edge*>* edgesToStartNode = new vector<edge*>();
     vector<edge*>* edgesToEndNode = new vector<edge*>();
@@ -1671,13 +1671,13 @@ const node* Topology::closest_and_within_node(const GEOSGeometry* geom, double t
     }
 
     // compute distance for remaining nodes
-    vector<double> distances(nodeIds.size()+1);
+    vector<double> distances;
     transform(nodeIds.begin(), nodeIds.end(), back_inserter(distances), [this, geom](int nodeId) {
         return ST_Distance(geom, this->_nodes[nodeId]->geom);
     });
 
     // return the node with the smallest distance to geom
-    return _nodes[nodeIds[distance(distances.begin(), min_element(distances.begin(), distances.end()))]];
+    return _nodes[nodeIds[distance(begin(distances), min_element(begin(distances), end(distances)))]];
 }
 
 /**
@@ -1702,13 +1702,13 @@ const edge* Topology::closest_and_within_edge(const GEOSGeometry* geom, double t
     }
 
     // compute distance for remaining edges
-    vector<double> distances(edgeIds.size()+1);
+    vector<double> distances;
     transform(edgeIds.begin(), edgeIds.end(), back_inserter(distances), [this, geom](int edgeId) {
         return ST_Distance(geom, this->_edges[edgeId]->geom);
     });
 
     // return the edge with the smallest distance to geom
-    return _edges[edgeIds[distance(distances.begin(), min_element(distances.begin(), distances.end()))]];
+    return _edges[edgeIds[distance(begin(distances), min_element(begin(distances), end(distances)))]];
 }
 
 void Topology::_update_left_face(edge* e, int faceId)
