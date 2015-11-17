@@ -43,8 +43,8 @@ typedef boost::geometry::model::d2::point_xy<double> point;
 typedef boost::geometry::model::box<point> box;
 typedef std::pair<box,   int> edge_value;
 typedef std::pair<point, int> node_value;
-typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<30000> > edge_idx_t;
-typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<30000> > node_idx_t;
+typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<100000> > edge_idx_t;
+typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<100000> > node_idx_t;
 
 /**
  * Other useful types.

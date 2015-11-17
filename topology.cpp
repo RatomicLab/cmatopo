@@ -185,6 +185,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
     assert (noded);
 
     // 3. For each (now-noded) segment, insert an edge
+    vector<edge_value> results_s;
     int nbNodes = GEOSGetNumGeometries_r(hdl, noded);
     for (int i = 0; i < nbNodes; ++i) {
         const GEOSGeometry* rec = GEOSGetGeometryN_r(hdl, noded, i);
@@ -205,12 +206,14 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
         }
 
         int edgeId = NULLint;
-        for (edge* e : _edges) {
-            if (!e) continue;
-            assert (e->geom);
-            if (ST_Equals(e->geom, snapped)) {
-                edgeId = e->id;
-                break;
+        linestring snapped_ls;
+        GEOM2BOOSTLS(snapped, snapped_ls);
+        results_s.clear();
+        _edge_idx->query(bgi::intersects(snapped_ls), back_inserter(results_s));
+        for (auto& _v : results_s) {
+            int _id = _v.second;
+            if (ST_Equals(_edges[_id]->geom, snapped)) {
+                edgeId = _id;
             }
         }
 
@@ -1203,12 +1206,12 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
     // face 0 is invalid (universal face)
     assert (faceId > 0 && faceId < _faces.size());
 
-    for (int _id : *(*_left_faces_idx)[faceId]) {
-        _gfg_geometries->push_back(GEOSGeom_clone_r(hdl, _edges[_id]->geom));
-    }
+    assert (faceId > 0 && faceId < _faces.size() && _faces[faceId] != nullptr);
 
-    for (int _id : *(*_right_faces_idx)[faceId]) {
-        _gfg_geometries->push_back(GEOSGeom_clone_r(hdl, _edges[_id]->geom));
+    edgeid_set edgeIds;
+    _face_edges(faceId, edgeIds);
+    for (int edgeId : edgeIds) {
+        _gfg_geometries->push_back(GEOSGeom_clone_r(hdl, _edges[edgeId]->geom));
     }
 
     GEOSGeom coll = GEOSGeom_createCollection_r(
@@ -1288,22 +1291,25 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
  *   FUNCTION topology.ST_AddIsoNode(atopology varchar, aface integer, apoint geometry)
  * Most code pertaining to faces was not ported as we don't need it (yet).
  */
-int Topology::ST_AddIsoNode(int faceId, const GEOSGeom point)
+int Topology::ST_AddIsoNode(int faceId, const GEOSGeom pt)
 {
-    assert (point != NULL);
-    assert (GEOSGeomTypeId_r(hdl, point) == GEOS_POINT);
+    assert (pt != NULL);
+    assert (GEOSGeomTypeId_r(hdl, pt) == GEOS_POINT);
 
-    for (node* n : _nodes) {
-        if (!n) continue;
-        if (ST_Equals(n->geom, point)) {
-            throw invalid_argument("SQL/MM Spatial exception - coincident node");
-        }
+    double x,y;
+    GEOSGeomGetX_r(hdl, pt, &x);
+    GEOSGeomGetY_r(hdl, pt, &y);
+
+    vector<node_value> results_s;
+    _node_idx->query(bgi::within(point(x, y)) && bgi::contains(point(x, y)), back_inserter(results_s));
+    if (results_s.size() != 0) {
+        throw invalid_argument("SQL/MM Spatial exception - coincident node");
     }
 
     vector<int> edgeIds;
-    _intersects<edge_idx_t, edge_value>(_edge_idx, point, edgeIds);
-    if (any_of(edgeIds.begin(), edgeIds.end(), [this, point](int edgeId) {
-        return GEOSIntersects_r(hdl, this->_edges[edgeId]->geom, point) == 1;
+    _intersects<edge_idx_t, edge_value>(_edge_idx, pt, edgeIds);
+    if (any_of(edgeIds.begin(), edgeIds.end(), [this, pt](int edgeId) {
+        return GEOSIntersects_r(hdl, this->_edges[edgeId]->geom, pt) == 1;
     }))
     {
         throw invalid_argument("SQL/MM Spatial exception - edge crosses node.");
@@ -1315,7 +1321,7 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom point)
         if (!_is_null(faceId) && faceId != 0 && f->id != faceId) continue;
 
         GEOSGeometry* facegeom = ST_GetFaceGeometry(f->id);
-        if (facegeom && f->intersects(point) && ST_Contains(facegeom, point)) {
+        if (facegeom && f->intersects(pt) && ST_Contains(facegeom, pt)) {
             GEOSGeom_destroy_r(hdl, facegeom);
             containing_face = f->id;
             break;
@@ -1344,7 +1350,7 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom point)
 
     node* newNode = new node;
     newNode->id = _nodes.size();
-    newNode->geom = point;
+    newNode->geom = pt;
     newNode->containing_face = containing_face;
     add_node(newNode);
 
