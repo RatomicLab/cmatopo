@@ -530,6 +530,14 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
                 relation* nrel = new relation();
                 nrel->element_id = newFaceId;
                 nrel->element_type = 3;
+
+                _transactions->push_back(
+                    new AddRelationTransaction(
+                        *this,
+                        nrel->id
+                    )
+                );
+
                 _relations.push_back(nrel);
             }
         }
@@ -1383,6 +1391,25 @@ void Topology::output_faces() const
         if (!f) continue;
         cout << f->id << " | " << (f->geom ? _geos.as_string(f->geom) : "") << endl;
         fs <<  f->id << "|" << (f->geom ? _geos.as_string(f->geom) : "") << endl;
+    }
+
+    fs.close();
+}
+
+void Topology::output_relations() const
+{
+    std::fstream fs("cmatopo_relation_output.txt", std::ios::out);
+
+    cout << "relation count: " << _relations.size() << endl;
+    cout << "topogeo_id | layer_id | element_id | element_type" << endl;
+    for (const relation* r : _relations) {
+        if (!r) continue;
+        cout << r->topogeo_id << " | " << r->layer_id << " | "
+             << r->element_id << " | " << r->element_type
+             << endl;
+        fs << r->topogeo_id << " | " << r->layer_id << " | "
+           << r->element_id << " | " << r->element_type
+           << endl;
     }
 
     fs.close();

@@ -125,4 +125,27 @@ void RemoveFaceIndexTransaction::rollback()
     (*_index)[_faceId]->insert(_edgeId);
 }
 
+AddRelationTransaction::AddRelationTransaction(
+    Topology& topology,
+    int relationId
+)
+: TopologyTransaction(topology)
+, _relationId(relationId)
+{
+}
+
+AddRelationTransaction::~AddRelationTransaction()
+{
+}
+
+void AddRelationTransaction::rollback()
+{
+    assert (_relationId < _topology._relations.size());
+
+    relation* rel = _topology._relations[_relationId];
+    assert (rel && rel->id == _relationId);
+    _topology._relations[_relationId] = nullptr;
+    delete rel;
+}
+
 } // namespace cma

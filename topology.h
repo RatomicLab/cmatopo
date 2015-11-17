@@ -61,6 +61,7 @@ class Topology
     friend class TopologyTransaction;
     friend class AddFaceIndexTransaction;
     friend class RemoveFaceIndexTransaction;
+    friend class AddRelationTransaction;
 
 public:
     Topology(GEOSHelper& geos);
@@ -101,9 +102,11 @@ public:
     void commit();
     void rollback();
 
+    void output() const;
     void output_nodes() const;
     void output_edges() const;
     void output_faces() const;
+    void output_relations() const;
 
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);

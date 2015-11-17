@@ -111,6 +111,9 @@ class face : public geom_container {
 };
 
 typedef struct {
+    int id = NULLint;     // convenience, not in original table
+    int topogeo_id = NULLint;
+    int layer_id = NULLint;
     int element_id = NULLint;
     int element_type = NULLint;
 } relation;
