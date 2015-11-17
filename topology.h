@@ -43,8 +43,8 @@ typedef boost::geometry::model::d2::point_xy<double> point;
 typedef boost::geometry::model::box<point> box;
 typedef std::pair<box,   int> edge_value;
 typedef std::pair<point, int> node_value;
-typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<30000> > edge_idx_t;
-typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<30000> > node_idx_t;
+typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<100000> > edge_idx_t;
+typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<100000> > node_idx_t;
 
 /**
  * Other useful types.
@@ -61,6 +61,7 @@ class Topology
     friend class TopologyTransaction;
     friend class AddFaceIndexTransaction;
     friend class RemoveFaceIndexTransaction;
+    friend class AddRelationTransaction;
 
 public:
     Topology(GEOSHelper& geos);
@@ -101,9 +102,11 @@ public:
     void commit();
     void rollback();
 
+    void output() const;
     void output_nodes() const;
     void output_edges() const;
     void output_faces() const;
+    void output_relations() const;
 
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);

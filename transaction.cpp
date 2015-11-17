@@ -97,7 +97,7 @@ AddFaceIndexTransaction::~AddFaceIndexTransaction()
 
 void AddFaceIndexTransaction::rollback()
 {
-    cout << "AddFaceIndexTransaction::rollback(): removing edge " << _edgeId << " from face " << _faceId << " index" << endl;
+    // cout << "AddFaceIndexTransaction::rollback(): removing edge " << _edgeId << " from face " << _faceId << " index" << endl;
     size_t nelem = (*_index)[_faceId]->erase(_edgeId);
     assert (nelem == 1);
 }
@@ -121,8 +121,31 @@ RemoveFaceIndexTransaction::~RemoveFaceIndexTransaction()
 
 void RemoveFaceIndexTransaction::rollback()
 {
-    cout << "RemoveFaceIndexTransaction::rollback(): re-adding edge " << _edgeId << " to face " << _faceId << " index" << endl;
+    // cout << "RemoveFaceIndexTransaction::rollback(): re-adding edge " << _edgeId << " to face " << _faceId << " index" << endl;
     (*_index)[_faceId]->insert(_edgeId);
+}
+
+AddRelationTransaction::AddRelationTransaction(
+    Topology& topology,
+    int relationId
+)
+: TopologyTransaction(topology)
+, _relationId(relationId)
+{
+}
+
+AddRelationTransaction::~AddRelationTransaction()
+{
+}
+
+void AddRelationTransaction::rollback()
+{
+    assert (_relationId < _topology._relations.size());
+
+    relation* rel = _topology._relations[_relationId];
+    assert (rel && rel->id == _relationId);
+    _topology._relations[_relationId] = nullptr;
+    delete rel;
 }
 
 } // namespace cma

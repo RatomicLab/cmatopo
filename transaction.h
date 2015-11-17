@@ -97,6 +97,20 @@ private:
     int _edgeId;
 };
 
+class AddRelationTransaction : public TopologyTransaction
+{
+public:
+    AddRelationTransaction(
+        Topology& topology,
+        int relationId);
+    ~AddRelationTransaction();
+
+    void rollback();
+
+private:
+    int _relationId;
+};
+
 } // namespace cma
 
 #endif // __CMA_TRANSACTION_H

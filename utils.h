@@ -66,6 +66,8 @@ public:
         return wkt;
     }
 
+    void print_geom(const GEOSGeometry* geom);
+
 private:
     GEOSWKBReader* wkbr = NULL;
     GEOSWKTReader* wktr = NULL;

@@ -1,2 +1,7 @@
 *.o
 cmatopo
+*.swp
+core-*
+.gdb_history
+*.txt
+*.csv
