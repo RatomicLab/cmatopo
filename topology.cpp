@@ -908,7 +908,7 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
             GEOSFree_r(hdl, relate);
             ostringstream oss;
-            oss << "SQL/MM Spatial exception - geometry crosses a edge " << _id;
+            oss << "SQL/MM Spatial exception - geometry crosses edge " << _id;
             throw invalid_argument(oss.str());
         }
 
