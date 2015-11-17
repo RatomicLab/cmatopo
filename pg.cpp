@@ -60,6 +60,22 @@ bool PG::success(PGresult* res) const
     return (status == PGRES_TUPLES_OK || status == PGRES_COMMAND_OK);
 }
 
+int PG::get_line_count()
+{
+    ostringstream oss;
+    oss << "SELECT count(1) FROM way;";
+
+    PGresult* res = query(oss.str().c_str());
+    if (!success(res)) {
+        PQclear(res);
+        return -1;
+    }
+
+    char* count = PQgetvalue(res, 0, 0);
+    PQclear(res);
+    return atoi(count);
+}
+
 bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)
 {
     GEOSGeometry* geom = OGREnvelope2GEOSGeom(envelope);
