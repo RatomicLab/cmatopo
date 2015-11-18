@@ -190,8 +190,12 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
     for (int i = 0; i < nbNodes; ++i) {
         const GEOSGeometry* rec = GEOSGetGeometryN_r(hdl, noded, i);
 
-        int start_node = TopoGeo_AddPoint(ST_StartPoint(rec), tolerance);
-        int end_node = TopoGeo_AddPoint(ST_EndPoint(rec), tolerance);
+        GEOSGeometry* sp = ST_StartPoint(rec);
+        GEOSGeometry* ep = ST_EndPoint(rec);
+        int start_node = TopoGeo_AddPoint(sp, tolerance);
+        int end_node = TopoGeo_AddPoint(ep, tolerance);
+        GEOSGeom_destroy_r(hdl, sp);
+        GEOSGeom_destroy_r(hdl, ep);
 
         GEOSGeom sn = _nodes[start_node]->geom;
         GEOSGeom en = _nodes[end_node]->geom;
@@ -1360,7 +1364,7 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom pt)
 
     node* newNode = new node;
     newNode->id = _nodes.size();
-    newNode->geom = pt;
+    newNode->geom = GEOSGeom_clone_r(hdl, pt);
     newNode->containing_face = containing_face;
     add_node(newNode);
 
