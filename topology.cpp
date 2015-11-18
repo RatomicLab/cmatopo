@@ -659,6 +659,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
     edgeid_set* faceEdges = new edgeid_set;
     _face_edges(faceId, *faceEdges);
 
+    GEOSGeometry* env = GEOSEnvelope_r(hdl, shell_geoms);
     for (int _id : *faceEdges) {
         assert (_id != 0);
         edge* e = _edges[_id];
@@ -667,7 +668,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         {
             GEOSGeom closestPoint = GEOSInterpolate_r(hdl, e->geom, 0.2);
             // sqlmm.sql.in:~3092
-            bool c = GEOSIntersects_r(hdl, GEOSEnvelope_r(hdl, shell_geoms), e->envelope()) == 1 && ST_Contains(shell_geoms, closestPoint);
+            bool c = GEOSIntersects_r(hdl, env, e->envelope()) == 1 && ST_Contains(shell_geoms, closestPoint);
             GEOSGeom_destroy_r(hdl, closestPoint);
 
             c = ishole ? !c : c;
@@ -682,6 +683,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
             }
         }
     }
+    GEOSGeom_destroy_r(hdl, env);
 
     delete faceEdges;
 
