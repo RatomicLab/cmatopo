@@ -44,6 +44,7 @@ Topology::Topology(GEOSHelper& geos)
 , _inserted_nodes(new vector<int>())
 , _inserted_edges(new vector<int>())
 , _inserted_faces(new vector<int>())
+, _tr_track_geom(new set<GEOSGeometry*>())
 , _geos(geos)
 , _edge_idx(new edge_idx_t)
 , _edge_tol_idx(new edge_idx_t)
@@ -85,6 +86,7 @@ Topology::~Topology()
         delete _right_faces_idx;
     }
 
+    assert (_gfg_geometries->empty());
     delete _gfg_geometries;
 
     delete _transactions;
@@ -92,6 +94,9 @@ Topology::~Topology()
     delete _inserted_nodes;
     delete _inserted_edges;
     delete _inserted_faces;
+
+    assert (_tr_track_geom->empty());
+    delete _tr_track_geom;
 
     delete_all(_nodes);
     delete_all(_edges);
@@ -1052,11 +1057,8 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
     _ST_AdjacentEdges(oldEdge->start_node, edgeId, preStartEdgeIds);
     _ST_AdjacentEdges(oldEdge->end_node, -edgeId, preEndEdgeIds);
 
-    GEOSGeometry* g = _edges[edgeId]->geom;
     _transactions->push_back(new EdgeTransaction(*this, _edges[edgeId]));
     _edges[edgeId]->geom = acurve;
-    assert (g);
-    GEOSGeom_destroy_r(hdl, g);
 
     vector<int> postStartEdgeIds;
     vector<int> postEndEdgeIds;
@@ -1644,9 +1646,10 @@ void Topology::commit()
 {
     for (TopologyTransaction* transaction : *_transactions) {
         transaction->commit();
-        delete transaction;
     }
+    delete_all(*_transactions);
     _transactions->clear();
+    _tr_track_geom->clear();
 
     _inserted_nodes->clear();
     _inserted_edges->clear();

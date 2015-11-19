@@ -1,6 +1,7 @@
 #ifndef __CMA_TOPOLOGY_H
 #define __CMA_TOPOLOGY_H
 
+#include <set>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -125,6 +126,11 @@ private:
     std::vector<int>* _inserted_edges = nullptr;
     std::vector<int>* _inserted_faces = nullptr;
 
+    /**
+     * Temporary vector to track geometry deletion
+     * when a commit/rollback operation occurs.
+     */
+    std::set<GEOSGeometry*>* _tr_track_geom = nullptr;
 
     /**
      * GEOS helper class.
@@ -185,12 +191,6 @@ private:
 
     void _face_edges(int faceId, edgeid_set& edges);
 
-    template<class T>
-    bool _is_in(T hay, const std::vector<T>& stack) const;
-
-    template <class T>
-    bool _is_null(T& val) const;
-
     int _ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly);
     void GetRingEdges(int edgeId, std::vector<int>& ringEdgeIds, int maxEdges=NULLint);
     void _find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_t& pan, bool span, edge* newEdge, bool isclosed);
@@ -208,18 +208,6 @@ void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls);
  * Convert a GEOS geometry (GEOS_LINESTRING or GEOS_LINEARRING) to a Boost linestring.
  */
 void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls);
-
-template<class T>
-bool Topology::_is_in(T hay, const std::vector<T>& stack) const
-{
-    return (std::find(stack.begin(), stack.end(), hay) != stack.end());
-}
-
-template <class T>
-bool Topology::_is_null(T& val) const
-{
-    return (val == std::numeric_limits<T>::max());
-}
 
 /**
  * Delete all elements of a pointer vector and empty it.

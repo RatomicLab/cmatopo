@@ -14,8 +14,13 @@ EdgeTransaction::EdgeTransaction(Topology& topology, edge* e)
 
 EdgeTransaction::~EdgeTransaction()
 {
-    if (_topology._edges[_edge->id]->geom == _edge->geom) {
+    if (_topology._edges[_edge->id]->geom == _edge->geom
+     || _is_in(_edge->geom, *_topology._tr_track_geom))
+    {
         _edge->geom = nullptr;
+    }
+    else {
+        _topology._tr_track_geom->insert(_edge->geom);
     }
     delete _edge;
 }
@@ -35,8 +40,13 @@ NodeTransaction::NodeTransaction(Topology& topology, node* n)
 
 NodeTransaction::~NodeTransaction()
 {
-    if (_topology._nodes[_node->id]->geom == _node->geom) {
+    if (_topology._nodes[_node->id]->geom == _node->geom
+     || _is_in(_node->geom, *_topology._tr_track_geom))
+    {
         _node->geom = nullptr;
+    }
+    else {
+        _topology._tr_track_geom->insert(_node->geom);
     }
     delete _node;
 }
@@ -56,8 +66,13 @@ FaceTransaction::FaceTransaction(Topology& topology, face* f)
 
 FaceTransaction::~FaceTransaction()
 {
-    if (_topology._faces[_face->id]->geom == _face->geom) {
+    if (_topology._faces[_face->id]->geom == _face->geom
+     || _is_in(_face->geom, *_topology._tr_track_geom))
+    {
         _face->geom = nullptr;
+    }
+    else {
+        _topology._tr_track_geom->insert(_face->geom);
     }
     delete _face;
 }
