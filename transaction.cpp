@@ -103,9 +103,11 @@ AddFaceIndexTransaction::~AddFaceIndexTransaction()
 
 void AddFaceIndexTransaction::rollback()
 {
-    // cout << "AddFaceIndexTransaction::rollback(): removing edge " << _edgeId << " from face " << _faceId << " index" << endl;
     size_t nelem = (*_index)[_faceId]->erase(_edgeId);
     assert (nelem == 1);
+
+    // invalidate face geometry cache
+    (*_topology._face_geometries)[_faceId] = nullptr;
 }
 
 RemoveFaceIndexTransaction::RemoveFaceIndexTransaction(
@@ -127,8 +129,10 @@ RemoveFaceIndexTransaction::~RemoveFaceIndexTransaction()
 
 void RemoveFaceIndexTransaction::rollback()
 {
-    // cout << "RemoveFaceIndexTransaction::rollback(): re-adding edge " << _edgeId << " to face " << _faceId << " index" << endl;
     (*_index)[_faceId]->insert(_edgeId);
+
+    // invalidate face geometry cache
+    (*_topology._face_geometries)[_faceId] = nullptr;
 }
 
 AddRelationTransaction::AddRelationTransaction(
