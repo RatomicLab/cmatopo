@@ -1268,7 +1268,7 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
     assert (faceId > 0 && faceId < _faces.size() && _faces[faceId] != nullptr);
 
     if ((*_face_geometries)[faceId]) {
-        return GEOSGeom_clone_r(hdl, (*_face_geometries)[faceId]);
+        return (*_face_geometries)[faceId];
     }
 
     edgeid_set edgeIds;
@@ -1545,8 +1545,15 @@ void Topology::add_edge(edge* e)
     ));
     (*_right_faces_idx)[e->right_face]->insert(e->id);
 
-    (*_face_geometries)[e->left_face] = nullptr;
-    (*_face_geometries)[e->right_face] = nullptr;
+    if ((*_face_geometries)[e->left_face]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
+        (*_face_geometries)[e->left_face] = nullptr;
+    }
+
+    if ((*_face_geometries)[e->right_face]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
+        (*_face_geometries)[e->right_face] = nullptr;
+    }
 
     _inserted_edges->push_back(e->id);
 }
@@ -1839,7 +1846,10 @@ void Topology::_update_left_face(edge* e, int faceId)
     e->left_face = faceId;
     (*_left_faces_idx)[faceId]->insert(e->id);
 
-    (*_face_geometries)[faceId] = nullptr;
+    if ((*_face_geometries)[faceId]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[faceId]);
+        (*_face_geometries)[faceId] = nullptr;
+    }
 }
 
 void Topology::_update_right_face(edge* e, int faceId)
@@ -1865,7 +1875,10 @@ void Topology::_update_right_face(edge* e, int faceId)
     e->right_face = faceId;
     (*_right_faces_idx)[faceId]->insert(e->id);
 
-    (*_face_geometries)[faceId] = nullptr;
+    if ((*_face_geometries)[faceId]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[faceId]);
+        (*_face_geometries)[faceId] = nullptr;
+    }
 }
 
 void Topology::_face_edges(int faceId, edgeid_set& edges)

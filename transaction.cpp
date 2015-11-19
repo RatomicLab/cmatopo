@@ -107,7 +107,10 @@ void AddFaceIndexTransaction::rollback()
     assert (nelem == 1);
 
     // invalidate face geometry cache
-    (*_topology._face_geometries)[_faceId] = nullptr;
+    if ((*_topology._face_geometries)[_faceId]) {
+        GEOSGeom_destroy_r(hdl, (*_topology._face_geometries)[_faceId]);
+        (*_topology._face_geometries)[_faceId] = nullptr;
+    }
 }
 
 RemoveFaceIndexTransaction::RemoveFaceIndexTransaction(
@@ -132,7 +135,10 @@ void RemoveFaceIndexTransaction::rollback()
     (*_index)[_faceId]->insert(_edgeId);
 
     // invalidate face geometry cache
-    (*_topology._face_geometries)[_faceId] = nullptr;
+    if ((*_topology._face_geometries)[_faceId]) {
+        GEOSGeom_destroy_r(hdl, (*_topology._face_geometries)[_faceId]);
+        (*_topology._face_geometries)[_faceId] = nullptr;
+    }
 }
 
 AddRelationTransaction::AddRelationTransaction(
