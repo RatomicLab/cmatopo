@@ -192,7 +192,10 @@ void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo
         }
     }
 
-    for (int idx : to_del) zones.erase(zones.begin() + idx);
+    for (int idx : to_del) {
+        delete zones[idx];
+        zones.erase(zones.begin() + idx);
+    }
     for (auto subzones : to_add) {
         zones.insert(zones.end(), subzones.begin(), subzones.end());
     }

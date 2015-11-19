@@ -8,19 +8,16 @@ namespace cma {
 
 EdgeTransaction::EdgeTransaction(Topology& topology, edge* e)
 : TopologyTransaction(topology)
-, _edge(new edge(e))
+, _edge(new edge(e, false))
 {
 }
 
 EdgeTransaction::~EdgeTransaction()
 {
+    if (_topology._edges[_edge->id]->geom == _edge->geom) {
+        _edge->geom = nullptr;
+    }
     delete _edge;
-}
-
-void EdgeTransaction::commit()
-{
-    // don't destroy _edge->geom, it will be destroyed when
-    // _edge is deleted.
 }
 
 void EdgeTransaction::rollback()
@@ -32,19 +29,16 @@ void EdgeTransaction::rollback()
 
 NodeTransaction::NodeTransaction(Topology& topology, node* n)
 : TopologyTransaction(topology)
-, _node(new node(n))
+, _node(new node(n, false))
 {
 }
 
 NodeTransaction::~NodeTransaction()
 {
+    if (_topology._nodes[_node->id]->geom == _node->geom) {
+        _node->geom = nullptr;
+    }
     delete _node;
-}
-
-void NodeTransaction::commit()
-{
-    // don't destroy _node->geom, it will be destroyed when
-    // _node is deleted.
 }
 
 void NodeTransaction::rollback()
@@ -56,19 +50,16 @@ void NodeTransaction::rollback()
 
 FaceTransaction::FaceTransaction(Topology& topology, face* f)
 : TopologyTransaction(topology)
-, _face(new face(f))
+, _face(new face(f, false))
 {
 }
 
 FaceTransaction::~FaceTransaction()
 {
+    if (_topology._faces[_face->id]->geom == _face->geom) {
+        _face->geom = nullptr;
+    }
     delete _face;
-}
-
-void FaceTransaction::commit()
-{
-    // don't destroy _face->geom, it will be destroyed when
-    // _face is deleted.
 }
 
 void FaceTransaction::rollback()

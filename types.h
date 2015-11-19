@@ -62,7 +62,7 @@ class edge : public geom_container {
         prev_left_edge(other.prev_left_edge),
         prev_right_edge(other.prev_right_edge) {};
 
-    virtual ~edge() {}
+    ~edge() {}
 
     int id = NULLint;
     int start_node = NULLint;
@@ -88,8 +88,8 @@ class node : public geom_container {
         id(other.id),
         containing_face(other.containing_face) {};
 
-    virtual ~node() {}
-    virtual bool intersects(const GEOSGeometry* geom);
+    ~node() {}
+    bool intersects(const GEOSGeometry* geom);
 
     int id = NULLint;
     int containing_face = NULLint;
@@ -105,7 +105,7 @@ class face : public geom_container {
         geom_container(other, clone_geom),
         id(other.id) {};
 
-    virtual ~face() {}
+    ~face() {}
 
     int id = NULLint;
 };

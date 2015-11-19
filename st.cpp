@@ -518,7 +518,7 @@ GEOSGeometry* ST_CollectionExtract(GEOSGeometry* geom, int type)
 
     if (!is_collection(geom)) {
         if (GEOSGeomTypeId_r(hdl, geom) == type) {
-            return geom;
+            return GEOSGeom_clone_r(hdl, geom);
         }
 
         GEOSGeometry* ret = NULL;

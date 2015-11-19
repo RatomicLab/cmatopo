@@ -40,11 +40,15 @@ int main(int argc, char **argv)
 
     // vm with Quebec only: postgresql://postgres@192.168.56.101/postgis
     // vm with the world: postgresql://pgsql@pg/cmdb
-    PG db("postgresql://postgres@localhost/postgis");
+    // PG db("postgresql://postgres@localhost/postgis");
+    PG db("postgresql://laurent@localhost/cmatopo");
     if (!db.connected()) {
         cerr << "Could not connect to PostgreSQL." << endl;
         return 1;
     }
+
+    int line_count = db.get_line_count();
+    assert (line_count >= 0);
 
     vector<int>* zonesPerProcess = new vector<int>(world.size());
     vector< list< pair<int, string> > >* processZones =
@@ -85,12 +89,19 @@ int main(int argc, char **argv)
                 make_pair(zoneId++, geos.as_string(zoneGeom))
             );
             GEOSGeom_destroy_r(hdl, zoneGeom);
+            delete z;
         }
+        zones.clear();
 
+        int processingLineCount = 0;
         for (int i = 0; i < zonesPerProcess->size(); ++i) {
             cout << "[0] Process " << i << " will process " << (*zonesPerProcess)[i]
                  << " lines." << endl;
+            processingLineCount += (*zonesPerProcess)[i];
         }
+
+        cout << "Will process " << processingLineCount << ", leaving " << line_count-processingLineCount
+             << " orphans (" << (line_count-processingLineCount)/float(processingLineCount)*100 << "%)" << endl;
     }
 
     list< pair<int, string> > myZones;
@@ -117,8 +128,10 @@ int main(int argc, char **argv)
             assert (false);
         }
 
+        GEOSGeom_destroy_r(hdl, zoneGeom);
+
         cout << "[" << world.rank() << "] processing zone #" <<  zoneId
-             << " (" << lines.size() << " lines)";
+             << " (" << lines.size() << " lines)" << endl;
 
         if (lines.size() == 0) {
             continue;
@@ -138,10 +151,13 @@ int main(int argc, char **argv)
                 topology->rollback();
             }
 
+            GEOSGeom_destroy_r(hdl, line);
+
             if (++lc % 100 == 0) {
                 cout << lc << endl;
             }
         }
+        lines.clear();
 
         end = chrono::system_clock::now();
         chrono::duration<double> elapsed_seconds = end-start;
