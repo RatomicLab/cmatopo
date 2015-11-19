@@ -66,12 +66,26 @@ public:
         return wkt;
     }
 
+    void print_geom(const GEOSGeometry* geom);
+
 private:
     GEOSWKBReader* wkbr = NULL;
     GEOSWKTReader* wktr = NULL;
     GEOSWKBWriter* wkbw = NULL;
     GEOSWKTWriter* wktw = NULL;
 };
+
+template<class C, class T>
+bool _is_in(T hay, const C& stack)
+{
+    return (std::find(stack.begin(), stack.end(), hay) != stack.end());
+}
+
+template <class T>
+bool _is_null(T& val)
+{
+    return (val == std::numeric_limits<T>::max());
+}
 
 } // namespace cma
 

@@ -29,7 +29,7 @@ PG::~PG()
 
 bool PG::connected() const
 {
-    return _conn != NULL;
+    return _conn != NULL && PQstatus(_conn) == CONNECTION_OK;
 }
 
 PGresult* PG::query(const std::string& sql, bool single_row_mode)
@@ -58,6 +58,22 @@ bool PG::success(PGresult* res) const
 
     int status = PQresultStatus(res);
     return (status == PGRES_TUPLES_OK || status == PGRES_COMMAND_OK);
+}
+
+int PG::get_line_count()
+{
+    ostringstream oss;
+    oss << "SELECT count(1) FROM way;";
+
+    PGresult* res = query(oss.str().c_str());
+    if (!success(res)) {
+        PQclear(res);
+        return -1;
+    }
+
+    char* count = PQgetvalue(res, 0, 0);
+    PQclear(res);
+    return atoi(count);
 }
 
 bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)

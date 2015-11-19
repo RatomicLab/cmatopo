@@ -28,7 +28,6 @@ public:
     EdgeTransaction(Topology& topology, edge* e);
     ~EdgeTransaction();
 
-    void commit();
     void rollback();
 
 private:
@@ -41,7 +40,6 @@ public:
     NodeTransaction(Topology& topology, node* n);
     ~NodeTransaction();
 
-    void commit();
     void rollback();
 
 private:
@@ -54,7 +52,6 @@ public:
     FaceTransaction(Topology& topology, face* f);
     ~FaceTransaction();
 
-    void commit();
     void rollback();
 
 private:
@@ -95,6 +92,20 @@ private:
     std::vector<edgeid_set_ptr>* _index;
     int _faceId;
     int _edgeId;
+};
+
+class AddRelationTransaction : public TopologyTransaction
+{
+public:
+    AddRelationTransaction(
+        Topology& topology,
+        int relationId);
+    ~AddRelationTransaction();
+
+    void rollback();
+
+private:
+    int _relationId;
 };
 
 } // namespace cma

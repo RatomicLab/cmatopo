@@ -1,6 +1,7 @@
 #ifndef __CMA_TOPOLOGY_H
 #define __CMA_TOPOLOGY_H
 
+#include <set>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -43,8 +44,8 @@ typedef boost::geometry::model::d2::point_xy<double> point;
 typedef boost::geometry::model::box<point> box;
 typedef std::pair<box,   int> edge_value;
 typedef std::pair<point, int> node_value;
-typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<30000> > edge_idx_t;
-typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<30000> > node_idx_t;
+typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<100000> > edge_idx_t;
+typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<100000> > node_idx_t;
 
 /**
  * Other useful types.
@@ -61,6 +62,7 @@ class Topology
     friend class TopologyTransaction;
     friend class AddFaceIndexTransaction;
     friend class RemoveFaceIndexTransaction;
+    friend class AddRelationTransaction;
 
     friend void merge_topologies(Topology&, Topology&);
 
@@ -103,9 +105,11 @@ public:
     void commit();
     void rollback();
 
+    void output() const;
     void output_nodes() const;
     void output_edges() const;
     void output_faces() const;
+    void output_relations() const;
 
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);
@@ -124,6 +128,11 @@ private:
     std::vector<int>* _inserted_edges = nullptr;
     std::vector<int>* _inserted_faces = nullptr;
 
+    /**
+     * Temporary vector to track geometry deletion
+     * when a commit/rollback operation occurs.
+     */
+    std::set<GEOSGeometry*>* _tr_track_geom = nullptr;
 
     /**
      * GEOS helper class.
@@ -167,6 +176,11 @@ private:
     std::vector<edgeid_set_ptr>* _right_faces_idx = nullptr;
 
     /**
+     * Face geometry cache.
+     */
+    std::vector<GEOSGeometry*>* _face_geometries = nullptr;
+
+    /**
      * Temporary vector for ST_GetFaceGeometry operations.
      */
     std::vector<GEOSGeometry*>* _gfg_geometries = nullptr;
@@ -186,12 +200,6 @@ private:
 
     void _empty(bool free_items=true);
 
-    template<class T>
-    bool _is_in(T hay, const std::vector<T>& stack) const;
-
-    template <class T>
-    bool _is_null(T& val) const;
-
     int _ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly);
     void GetRingEdges(int edgeId, std::vector<int>& ringEdgeIds, int maxEdges=NULLint);
     void _find_links_to_node(int nodeId, std::vector<edge*>& edges, _span_t& pan, bool span, edge* newEdge, bool isclosed);
@@ -209,18 +217,6 @@ void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls);
  * Convert a GEOS geometry (GEOS_LINESTRING or GEOS_LINEARRING) to a Boost linestring.
  */
 void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls);
-
-template<class T>
-bool Topology::_is_in(T hay, const std::vector<T>& stack) const
-{
-    return (std::find(stack.begin(), stack.end(), hay) != stack.end());
-}
-
-template <class T>
-bool Topology::_is_null(T& val) const
-{
-    return (val == std::numeric_limits<T>::max());
-}
 
 /**
  * Delete all elements of a pointer vector and empty it.

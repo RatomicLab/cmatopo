@@ -8,19 +8,21 @@ namespace cma {
 
 EdgeTransaction::EdgeTransaction(Topology& topology, edge* e)
 : TopologyTransaction(topology)
-, _edge(new edge(e))
+, _edge(new edge(e, false))
 {
 }
 
 EdgeTransaction::~EdgeTransaction()
 {
+    if (_topology._edges[_edge->id]->geom == _edge->geom
+     || _is_in(_edge->geom, *_topology._tr_track_geom))
+    {
+        _edge->geom = nullptr;
+    }
+    else {
+        _topology._tr_track_geom->insert(_edge->geom);
+    }
     delete _edge;
-}
-
-void EdgeTransaction::commit()
-{
-    // don't destroy _edge->geom, it will be destroyed when
-    // _edge is deleted.
 }
 
 void EdgeTransaction::rollback()
@@ -32,19 +34,21 @@ void EdgeTransaction::rollback()
 
 NodeTransaction::NodeTransaction(Topology& topology, node* n)
 : TopologyTransaction(topology)
-, _node(new node(n))
+, _node(new node(n, false))
 {
 }
 
 NodeTransaction::~NodeTransaction()
 {
+    if (_topology._nodes[_node->id]->geom == _node->geom
+     || _is_in(_node->geom, *_topology._tr_track_geom))
+    {
+        _node->geom = nullptr;
+    }
+    else {
+        _topology._tr_track_geom->insert(_node->geom);
+    }
     delete _node;
-}
-
-void NodeTransaction::commit()
-{
-    // don't destroy _node->geom, it will be destroyed when
-    // _node is deleted.
 }
 
 void NodeTransaction::rollback()
@@ -56,19 +60,21 @@ void NodeTransaction::rollback()
 
 FaceTransaction::FaceTransaction(Topology& topology, face* f)
 : TopologyTransaction(topology)
-, _face(new face(f))
+, _face(new face(f, false))
 {
 }
 
 FaceTransaction::~FaceTransaction()
 {
+    if (_topology._faces[_face->id]->geom == _face->geom
+     || _is_in(_face->geom, *_topology._tr_track_geom))
+    {
+        _face->geom = nullptr;
+    }
+    else {
+        _topology._tr_track_geom->insert(_face->geom);
+    }
     delete _face;
-}
-
-void FaceTransaction::commit()
-{
-    // don't destroy _face->geom, it will be destroyed when
-    // _face is deleted.
 }
 
 void FaceTransaction::rollback()
@@ -97,9 +103,14 @@ AddFaceIndexTransaction::~AddFaceIndexTransaction()
 
 void AddFaceIndexTransaction::rollback()
 {
-    cout << "AddFaceIndexTransaction::rollback(): removing edge " << _edgeId << " from face " << _faceId << " index" << endl;
     size_t nelem = (*_index)[_faceId]->erase(_edgeId);
     assert (nelem == 1);
+
+    // invalidate face geometry cache
+    if ((*_topology._face_geometries)[_faceId]) {
+        GEOSGeom_destroy_r(hdl, (*_topology._face_geometries)[_faceId]);
+        (*_topology._face_geometries)[_faceId] = nullptr;
+    }
 }
 
 RemoveFaceIndexTransaction::RemoveFaceIndexTransaction(
@@ -121,8 +132,36 @@ RemoveFaceIndexTransaction::~RemoveFaceIndexTransaction()
 
 void RemoveFaceIndexTransaction::rollback()
 {
-    cout << "RemoveFaceIndexTransaction::rollback(): re-adding edge " << _edgeId << " to face " << _faceId << " index" << endl;
     (*_index)[_faceId]->insert(_edgeId);
+
+    // invalidate face geometry cache
+    if ((*_topology._face_geometries)[_faceId]) {
+        GEOSGeom_destroy_r(hdl, (*_topology._face_geometries)[_faceId]);
+        (*_topology._face_geometries)[_faceId] = nullptr;
+    }
+}
+
+AddRelationTransaction::AddRelationTransaction(
+    Topology& topology,
+    int relationId
+)
+: TopologyTransaction(topology)
+, _relationId(relationId)
+{
+}
+
+AddRelationTransaction::~AddRelationTransaction()
+{
+}
+
+void AddRelationTransaction::rollback()
+{
+    assert (_relationId < _topology._relations.size());
+
+    relation* rel = _topology._relations[_relationId];
+    assert (rel && rel->id == _relationId);
+    _topology._relations[_relationId] = nullptr;
+    delete rel;
 }
 
 } // namespace cma
