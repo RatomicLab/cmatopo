@@ -174,6 +174,11 @@ private:
     std::vector<edgeid_set_ptr>* _right_faces_idx = nullptr;
 
     /**
+     * Face geometry cache.
+     */
+    std::vector<GEOSGeometry*>* _face_geometries = nullptr;
+
+    /**
      * Temporary vector for ST_GetFaceGeometry operations.
      */
     std::vector<GEOSGeometry*>* _gfg_geometries = nullptr;

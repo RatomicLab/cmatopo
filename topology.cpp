@@ -52,6 +52,7 @@ Topology::Topology(GEOSHelper& geos)
 , _node_tol_idx(new edge_idx_t)
 , _left_faces_idx(new vector<edgeid_set_ptr>())
 , _right_faces_idx(new vector<edgeid_set_ptr>())
+, _face_geometries(new vector<GEOSGeometry*>())
 , _gfg_geometries(new vector<GEOSGeometry*>())
 {
     // edges and nodes cannot have id 0
@@ -65,6 +66,8 @@ Topology::Topology(GEOSHelper& geos)
 
     _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
     _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+
+    _face_geometries->push_back(nullptr);
 }
 
 Topology::~Topology()
@@ -85,6 +88,13 @@ Topology::~Topology()
         _right_faces_idx->clear();
         delete _right_faces_idx;
     }
+
+    for (GEOSGeometry* geom : *_face_geometries) {
+        if (geom) {
+            GEOSGeom_destroy_r(hdl, geom);
+        }
+    }
+    delete _face_geometries;
 
     assert (_gfg_geometries->empty());
     delete _gfg_geometries;
@@ -1073,7 +1083,6 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 
         GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->left_face);
         f->geom = ST_Envelope(faceGeom);
-        GEOSGeom_destroy_r(hdl, faceGeom);
     }
 
     if (oldEdge->right_face != 0 && oldEdge->right_face != oldEdge->left_face) {
@@ -1083,7 +1092,6 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
 
         GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->right_face);
         f->geom = ST_Envelope(faceGeom);
-        GEOSGeom_destroy_r(hdl, faceGeom);
     }
 
     return edgeId;
@@ -1257,9 +1265,11 @@ void Topology::GetNodeEdges(int nodeId, vector<int>& edgeIds)
 GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
 {
     // face 0 is invalid (universal face)
-    assert (faceId > 0 && faceId < _faces.size());
-
     assert (faceId > 0 && faceId < _faces.size() && _faces[faceId] != nullptr);
+
+    if ((*_face_geometries)[faceId]) {
+        return GEOSGeom_clone_r(hdl, (*_face_geometries)[faceId]);
+    }
 
     edgeid_set edgeIds;
     _face_edges(faceId, edgeIds);
@@ -1278,6 +1288,8 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
 
     GEOSGeom_destroy_r(hdl, coll);
     _gfg_geometries->clear();
+
+    (*_face_geometries)[faceId] = ret;
 
     return ret;
 }
@@ -1385,11 +1397,9 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom pt)
 
         GEOSGeometry* facegeom = ST_GetFaceGeometry(f->id);
         if (facegeom && f->intersects(pt) && ST_Contains(facegeom, pt)) {
-            GEOSGeom_destroy_r(hdl, facegeom);
             containing_face = f->id;
             break;
         }
-        GEOSGeom_destroy_r(hdl, facegeom);
     }
 
     if (!_is_null(faceId)) {
@@ -1535,6 +1545,9 @@ void Topology::add_edge(edge* e)
     ));
     (*_right_faces_idx)[e->right_face]->insert(e->id);
 
+    (*_face_geometries)[e->left_face] = nullptr;
+    (*_face_geometries)[e->right_face] = nullptr;
+
     _inserted_edges->push_back(e->id);
 }
 
@@ -1577,14 +1590,16 @@ void Topology::add_face(face* f)
     assert (f);
     assert (f->geom);
     assert (f->id == _faces.size());
+    assert (f->id == _left_faces_idx->size());
+    assert (f->id == _right_faces_idx->size());
     assert (GEOSGeomTypeId_r(hdl, f->geom) == GEOS_POLYGON);
 
     _faces.push_back(f);
 
-    if (_left_faces_idx->size() < _faces.size()) {
-        _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
-        _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
-    }
+    _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+    _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+
+    _face_geometries->push_back(nullptr);
 
     _inserted_faces->push_back(f->id);
 }
@@ -1823,6 +1838,8 @@ void Topology::_update_left_face(edge* e, int faceId)
 
     e->left_face = faceId;
     (*_left_faces_idx)[faceId]->insert(e->id);
+
+    (*_face_geometries)[faceId] = nullptr;
 }
 
 void Topology::_update_right_face(edge* e, int faceId)
@@ -1847,6 +1864,8 @@ void Topology::_update_right_face(edge* e, int faceId)
 
     e->right_face = faceId;
     (*_right_faces_idx)[faceId]->insert(e->id);
+
+    (*_face_geometries)[faceId] = nullptr;
 }
 
 void Topology::_face_edges(int faceId, edgeid_set& edges)
