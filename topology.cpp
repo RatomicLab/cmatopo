@@ -895,8 +895,6 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         assert (GEOSGeomGetNumPoints_r(hdl, g) >= 3);
         GEOSGeom_destroy_r(hdl, g);
 
-        GEOSGeom_destroy_r(hdl, range);
-
         range = ST_MakePolygon(acurve);
         forceRHR = ST_ForceRHR(range);
         assert (iscw == ST_OrderingEquals(range, forceRHR));
@@ -1661,9 +1659,10 @@ void Topology::rollback()
     auto tItr = _transactions->rbegin();
     for (; tItr < _transactions->rend(); ++tItr) {
         (*tItr)->rollback();
-        delete *tItr;
     }
+    delete_all(*_transactions);
     _transactions->clear();
+    _tr_track_geom->clear();
 
     /**
      * delete all nodes, edges and faces we added since
