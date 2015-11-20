@@ -10,6 +10,9 @@
 
 #include <boost/tuple/tuple.hpp>
 
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+
 #include <boost/geometry.hpp>
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/geometry/geometries/point_xy.hpp>
@@ -56,6 +59,8 @@ typedef boost::geometry::model::multi_linestring<linestring> multi_linestring;
 
 class Topology
 {
+    friend class boost::serialization::access;
+
     friend class FaceTransaction;
     friend class EdgeTransaction;
     friend class NodeTransaction;
@@ -67,7 +72,8 @@ class Topology
     friend void merge_topologies(Topology&, Topology&);
 
 public:
-    Topology(GEOSHelper& geos);
+    Topology();
+    Topology(GEOSHelper* geos);
     ~Topology();
 
     template <class T>
@@ -139,7 +145,7 @@ private:
     /**
      * GEOS helper class.
      */
-    GEOSHelper& _geos;
+    GEOSHelper* _geos = nullptr;
 
     /**
      * Edge envelope index.
@@ -211,6 +217,9 @@ private:
 
     template <class IndexType, class Value>
     void _intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& ids, double tolerance = 0.);
+
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version);
 };
 
 /**
@@ -318,6 +327,15 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
             return a.second;
         });
     }
+}
+
+template<class Archive>
+void Topology::serialize(Archive & ar, const unsigned int version)
+{
+    ar & _nodes;
+    ar & _edges;
+    ar & _faces;
+    ar & _relations;
 }
 
 } // namespace cma

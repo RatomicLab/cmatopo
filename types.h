@@ -9,6 +9,11 @@
 #include <geos_c.h>
 #include <ogrsf_frmts.h>
 
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/split_member.hpp>
+
 #define NULLint std::numeric_limits<int>::max()
 #define NULLdbl std::numeric_limits<double>::max()
 #define NULLsizet std::numeric_limits<size_t>::max()
@@ -20,6 +25,8 @@ typedef std::pair<OGREnvelope, int> zoneInfo;
 
 class geom_container
 {
+    friend class boost::serialization::access;
+
   public:
       geom_container() {}
       geom_container(const geom_container& other, bool clone = true): geom(other.geom) {
@@ -40,9 +47,59 @@ class geom_container
   protected:
       GEOSGeometry* _envelope = NULL;
       const GEOSPreparedGeometry* _prepared = NULL;
+
+  private:
+    template<class Archive>
+    void save(Archive & ar, const unsigned int version) const
+    {
+        if (!geom) {
+            ar & 0;
+            return;
+        }
+
+        GEOSWKBWriter* wkbw = GEOSWKBWriter_create();
+
+        size_t size;
+        unsigned char* bin = GEOSWKBWriter_write(wkbw, geom, &size);
+        ar & size;
+        for (int i = 0; i < size; ++i) {
+            ar & bin[i];
+        }
+        GEOSFree(bin);
+
+        GEOSWKBWriter_destroy(wkbw);
+    }
+
+    template<class Archive>
+    void load(Archive & ar, const unsigned int version)
+    {
+        size_t size;
+
+        ar & size;
+        if (size == 0) {
+            geom = nullptr;
+            return;
+        }
+
+        unsigned char* bin = new unsigned char[size];
+        for (int i = 0; i < size; ++i) {
+            ar & bin[i];
+        }
+
+        GEOSWKBReader* wkbr = GEOSWKBReader_create();
+        geom = GEOSWKBReader_read(wkbr, bin, size);
+        GEOSWKBReader_destroy(wkbr);
+
+        delete [] bin;
+    }
+
+    BOOST_SERIALIZATION_SPLIT_MEMBER()
 };
 
-class edge : public geom_container {
+class edge : public geom_container
+{
+    friend class boost::serialization::access;
+
   public:
     edge(): geom_container() {}
 
@@ -75,9 +132,28 @@ class edge : public geom_container {
     int right_face = NULLint;
     int prev_left_edge  = NULLint;       // convenience
     int prev_right_edge = NULLint;       // convenience
+
+  private:
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & boost::serialization::base_object<geom_container>(*this);
+        ar & id;
+        ar & start_node;
+        ar & end_node;
+        ar & next_left_edge;
+        ar & next_right_edge;
+        ar & abs_next_left_edge;
+        ar & abs_next_right_edge;
+        ar & left_face;
+        ar & right_face;
+    }
 };
 
-class node : public geom_container {
+class node : public geom_container
+{
+    friend class boost::serialization::access;
+
   public:
     node(): geom_container() {}
 
@@ -93,9 +169,21 @@ class node : public geom_container {
 
     int id = NULLint;
     int containing_face = NULLint;
+
+  private:
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & boost::serialization::base_object<geom_container>(*this);
+        ar & id;
+        ar & containing_face;
+    }
 };
 
-class face : public geom_container {
+class face : public geom_container
+{
+    friend class boost::serialization::access;
+
   public:
     face(): geom_container() {}
 
@@ -108,15 +196,38 @@ class face : public geom_container {
     ~face() {}
 
     int id = NULLint;
+
+  private:
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & boost::serialization::base_object<geom_container>(*this);
+        ar & id;
+    }
 };
 
-typedef struct {
+class relation
+{ 
+    friend class boost::serialization::access;
+
+public:
     int id = NULLint;     // convenience, not in original table
     int topogeo_id = NULLint;
     int layer_id = NULLint;
     int element_id = NULLint;
     int element_type = NULLint;
-} relation;
+
+private:
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & id;
+        ar & topogeo_id;
+        ar & layer_id;
+        ar & element_id;
+        ar & element_type;
+    }
+};
 
 typedef std::set<int> edgeid_set;
 typedef std::shared_ptr<edgeid_set> edgeid_set_ptr;

@@ -35,7 +35,15 @@ struct item_finder_predicate
     }
 };
 
-Topology::Topology(GEOSHelper& geos)
+Topology::Topology()
+: _nodes()
+, _edges()
+, _faces()
+, _relations()
+{
+}
+
+Topology::Topology(GEOSHelper* geos)
 : _nodes()
 , _edges()
 , _faces()
@@ -118,7 +126,7 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 {
     assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
 
-    // cout << "Topology::TopoGeo_AddLineString(" << _geos.as_string(line) << ")" << endl;
+    // cout << "Topology::TopoGeo_AddLineString(" << _geos->as_string(line) << ")" << endl;
 
     if (tolerance <= 0) {
         tolerance = _ST_MinTolerance(line);
@@ -295,7 +303,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     }
 
     //cout << "ST_AddEdgeModFace(" << start_node << ", " << end_node << ", "
-    //     << _geos.as_string(geom) << ")" << endl;
+    //     << _geos->as_string(geom) << ")" << endl;
 
     edge* newEdge = new edge();
     newEdge->id = _edges.size();
@@ -1303,7 +1311,7 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
     assert (geom);
     assert (GEOSGeomTypeId_r(hdl, geom) == GEOS_POINT);
 
-    // cout << "Topoogy::TopoGeo_AddPoint(" << _geos.as_string(geom) << ")" << endl;
+    // cout << "Topoogy::TopoGeo_AddPoint(" << _geos->as_string(geom) << ")" << endl;
 
     if (tolerance == 0.) {
         tolerance = _ST_MinTolerance(geom);
@@ -1447,8 +1455,8 @@ void Topology::output_nodes() const
 
     for (const node* n : _nodes) {
         if (!n) continue;
-        cout << n->id << " | " << n->containing_face << " | " << _geos.as_string(n->geom) << endl;
-        fs << n->id << "|" << (_is_null(n->containing_face) ? "" : to_string(n->containing_face)) << "|" << _geos.as_string(n->geom) << endl;
+        cout << n->id << " | " << n->containing_face << " | " << _geos->as_string(n->geom) << endl;
+        fs << n->id << "|" << (_is_null(n->containing_face) ? "" : to_string(n->containing_face)) << "|" << _geos->as_string(n->geom) << endl;
     }
 
     fs.close();
@@ -1462,8 +1470,8 @@ void Topology::output_faces() const
     cout << "face_id | mbr (as text)" << endl;
     for (const face* f : _faces) {
         if (!f) continue;
-        cout << f->id << " | " << (f->geom ? _geos.as_string(f->geom) : "") << endl;
-        fs <<  f->id << "|" << (f->geom ? _geos.as_string(f->geom) : "") << endl;
+        cout << f->id << " | " << (f->geom ? _geos->as_string(f->geom) : "") << endl;
+        fs <<  f->id << "|" << (f->geom ? _geos->as_string(f->geom) : "") << endl;
     }
 
     fs.close();
@@ -1800,7 +1808,7 @@ void Topology::output_edges() const
              << e->abs_next_right_edge << " | "
              << e->left_face << " | "
              << e->right_face << " | "
-             << _geos.as_string(e->geom)
+             << _geos->as_string(e->geom)
              << endl;
         fs << e->id << "|"
              << e->start_node << "|"
@@ -1811,7 +1819,7 @@ void Topology::output_edges() const
              << e->abs_next_right_edge << "|"
              << e->left_face << "|"
              << e->right_face << "|"
-             << _geos.as_string(e->geom)
+             << _geos->as_string(e->geom)
              << endl;
     }
 

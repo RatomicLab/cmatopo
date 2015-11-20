@@ -146,7 +146,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        Topology* topology = new Topology(*geos);
+        Topology* topology = new Topology(geos.get());
 
         int lc = 0;
         for (GEOSGeometry* line : lines) {
@@ -191,13 +191,12 @@ int main(int argc, char **argv)
             merge_topologies(*mainTopology, *otherTopology);
         }
 
-        // TODO: gather all topologies (one process at a time?)
-        /*
         for (int rank = 1; rank < world.rank(); ++rank) {
-            vector<Topology> topologies;
+            vector<Topology*> topologies;
             world.recv(rank, 0, topologies);
+
+            // TODO: merge topologies
         }
-        */
 
         mainTopology->rebuild_indexes();
 
@@ -223,8 +222,7 @@ int main(int argc, char **argv)
         mainTopology->output();
     }
     else {
-        // TODO: world.send to rank 0
-
+        world.send(0, 0, myTopologies);
         gather(world, *myOrphans, 0);
     }
 
