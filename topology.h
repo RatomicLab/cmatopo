@@ -105,6 +105,8 @@ public:
     void commit();
     void rollback();
 
+    void rebuild_indexes();
+
     void output() const;
     void output_nodes() const;
     void output_edges() const;
@@ -192,6 +194,9 @@ private:
     void remove_edge(int edgeId);
     void remove_node(int nodeId);
     void remove_face(int faceId);
+
+    void _update_indexes(const edge* e);
+    void _update_indexes(const node* e);
 
     void _update_left_face(edge* e, int faceId);
     void _update_right_face(edge* e, int faceId);

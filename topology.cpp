@@ -1488,16 +1488,9 @@ void Topology::output_relations() const
     fs.close();
 }
 
-void Topology::add_edge(edge* e)
+void Topology::_update_indexes(const edge* e)
 {
-    assert (e);
-    assert (e->id == _edges.size() || e->id == _edges.size()-1);
-    assert (e->geom);
-    assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
     assert (_edges.size() < 100000);
-
-    e->abs_next_left_edge = abs(e->next_left_edge);
-    e->abs_next_right_edge = abs(e->next_right_edge);
 
     bg::model::linestring<point> edgeLS;
 
@@ -1524,14 +1517,6 @@ void Topology::add_edge(edge* e)
     bg::set<0>(pt2, bg::get<0>(pt2)+DEFAULT_TOLERANCE);
     bg::set<1>(pt2, bg::get<1>(pt2)+DEFAULT_TOLERANCE);
 
-    if (e->id == _edges.size()) {
-        _edges.push_back(e);
-    }
-    else {
-        assert (_edges[e->id] == nullptr);
-        _edges[e->id] = e;
-    }
-
     _edge_idx->insert(make_pair(bounds, e->id));
     _edge_tol_idx->insert(make_pair(tolbounds, e->id));
 
@@ -1552,26 +1537,11 @@ void Topology::add_edge(edge* e)
         e->id
     ));
     (*_right_faces_idx)[e->right_face]->insert(e->id);
-
-    if ((*_face_geometries)[e->left_face]) {
-        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
-        (*_face_geometries)[e->left_face] = nullptr;
-    }
-
-    if ((*_face_geometries)[e->right_face]) {
-        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
-        (*_face_geometries)[e->right_face] = nullptr;
-    }
-
-    _inserted_edges->push_back(e->id);
 }
 
-void Topology::add_node(node* n)
+void Topology::_update_indexes(const node* n)
 {
-    assert (n);
-    assert (n->geom);
-    assert (n->id == _nodes.size());
-    assert (GEOSGeomTypeId_r(hdl, n->geom) == GEOS_POINT);
+    assert (_nodes.size() < 100000);
 
     double x, y;
     GEOSGeomGetX_r(hdl, n->geom, &x);
@@ -1593,10 +1563,52 @@ void Topology::add_node(node* n)
     box tolbounds;
     bg::envelope(result, tolbounds);
 
-    _nodes.push_back(n);
     _node_idx->insert(make_pair(pt, n->id));
     _node_tol_idx->insert(make_pair(tolbounds, n->id));
+}
 
+void Topology::add_edge(edge* e)
+{
+    assert (e);
+    assert (e->id == _edges.size() || e->id == _edges.size()-1);
+    assert (e->geom);
+    assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
+
+    e->abs_next_left_edge = abs(e->next_left_edge);
+    e->abs_next_right_edge = abs(e->next_right_edge);
+
+    if (e->id == _edges.size()) {
+        _edges.push_back(e);
+    }
+    else {
+        assert (_edges[e->id] == nullptr);
+        _edges[e->id] = e;
+    }
+
+    _update_indexes(e);
+
+    if ((*_face_geometries)[e->left_face]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
+        (*_face_geometries)[e->left_face] = nullptr;
+    }
+
+    if ((*_face_geometries)[e->right_face]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
+        (*_face_geometries)[e->right_face] = nullptr;
+    }
+
+    _inserted_edges->push_back(e->id);
+}
+
+void Topology::add_node(node* n)
+{
+    assert (n);
+    assert (n->geom);
+    assert (n->id == _nodes.size());
+    assert (GEOSGeomTypeId_r(hdl, n->geom) == GEOS_POINT);
+
+    _nodes.push_back(n);
+    _update_indexes(n);
     _inserted_nodes->push_back(n->id);
 }
 
@@ -1717,6 +1729,54 @@ void Topology::rollback()
     _inserted_nodes->clear();
     _inserted_edges->clear();
     _inserted_faces->clear();
+}
+
+void Topology::rebuild_indexes()
+{
+    int faceCount = _faces.size();
+    for (int i = 0 ; i < faceCount; ++i) {
+        assert (_left_faces_idx->size() == _right_faces_idx->size());
+        assert (_right_faces_idx->size() == _face_geometries->size());
+        if (i >= _left_faces_idx->size()) {
+            _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+            _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+            _face_geometries->push_back(nullptr);
+        }
+        else {
+            if ((*_left_faces_idx)[i]) {
+                (*_left_faces_idx)[i]->clear();
+            }
+            if ((*_right_faces_idx)[i]) {
+                (*_right_faces_idx)[i]->clear();
+            }
+        }
+    }
+    assert (_faces.size() == _left_faces_idx->size());
+
+    for (const edge* e : _edges) {
+        _update_indexes(e);
+        if ((*_face_geometries)[e->left_face]) {
+            GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
+            (*_face_geometries)[e->left_face] = nullptr;
+        }
+        if ((*_face_geometries)[e->right_face]) {
+            GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
+            (*_face_geometries)[e->right_face] = nullptr;
+        }
+    }
+
+    for (const node* n : _nodes) {
+        _update_indexes(n);
+    }
+
+    // invalidate face geometry cache
+    for (int i = 0; i < _face_geometries->size(); ++i) {
+        GEOSGeometry* faceGeom = (*_face_geometries)[i];
+        if (faceGeom) {
+            GEOSGeom_destroy_r(hdl, faceGeom);
+            (*_face_geometries)[i] = nullptr;
+        }
+    }
 }
 
 void Topology::output_edges() const
