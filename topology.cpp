@@ -1430,6 +1430,14 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom pt)
     return newNode->id;
 }
 
+void Topology::output() const
+{
+    output_nodes();
+    output_edges();
+    output_faces();
+    output_relations();
+}
+
 void Topology::output_nodes() const
 {
     std::fstream fs("cmatopo_node_output.txt", std::ios::out);
