@@ -24,10 +24,25 @@ public:
     /**
      * Below are some geometry helpers.
      */
-    bool get_lines_within(const GEOSGeometry* envelope, linesV& lines);
-    bool get_lines_within(OGREnvelope& envelope, linesV& lines);
+    bool get_lines(
+        const GEOSGeometry* envelope,
+        linesV& lines,
+        bool within=true,
+        int limit=-1);
+
+    bool get_line_ids(
+        const GEOSGeometry* envelope,
+        std::set<int>& line_ids,
+        bool within=true,
+        int limit=-1);
 
 private:
+    std::string _build_query(
+        const GEOSGeometry* geom,
+        bool within,
+        int limit,
+        bool id);
+
     PGconn* _conn = NULL;
 };
 

@@ -15,7 +15,7 @@ namespace cma {
 
 namespace cma {
 
-PG::PG(const std::string& connect_str)
+PG::PG(const string& connect_str)
 {
     _conn = PQconnectdb(connect_str.c_str());
 }
@@ -32,7 +32,7 @@ bool PG::connected() const
     return _conn != NULL && PQstatus(_conn) == CONNECTION_OK;
 }
 
-PGresult* PG::query(const std::string& sql, bool single_row_mode)
+PGresult* PG::query(const string& sql, bool single_row_mode)
 {
     if (!single_row_mode) {
         return PQexec(_conn, sql.c_str());
@@ -76,25 +76,15 @@ int PG::get_line_count()
     return atoi(count);
 }
 
-bool PG::get_lines_within(OGREnvelope& envelope, linesV& lines)
+bool PG::get_lines(
+    const GEOSGeometry* geom,
+    linesV& lines,
+    bool within,
+    int limit)
 {
-    GEOSGeometry* geom = OGREnvelope2GEOSGeom(envelope);
-    bool ret = get_lines_within(geom, lines);
-    GEOSGeom_destroy_r(hdl, geom);
-}
+    string q = _build_query(geom, within, limit, false);
 
-bool PG::get_lines_within(const GEOSGeometry* geom, linesV& lines)
-{
-    GEOSWKTWriter* wkt_writer = GEOSWKTWriter_create_r(hdl);
-
-    char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
-    ostringstream oss;
-    oss << "SELECT line2d_m FROM way WHERE ST_SetSRID('" << hex << "'::geometry, 3395) ~ line2d_m order by id";
-    cout << oss.str() << endl;
-    GEOSFree_r(hdl, hex);
-    GEOSWKTWriter_destroy_r(hdl, wkt_writer);
-
-    PGresult* res = query(oss.str().c_str());
+    PGresult* res = query(q.c_str());
 
     if (!success(res)) {
         PQclear(res);
@@ -114,6 +104,54 @@ bool PG::get_lines_within(const GEOSGeometry* geom, linesV& lines)
     PQclear(res);
 
     return true;
+}
+
+bool PG::get_line_ids(
+    const GEOSGeometry* envelope,
+    set<int>& line_ids,
+    bool within,
+    int limit)
+{
+    string q = _build_query(envelope, within, limit, true);
+
+    PGresult* res = query(q.c_str());
+
+    if (!success(res)) {
+        PQclear(res);
+        return false;
+    }
+
+    char* id;
+    for (int i = 0; i < PQntuples(res); i++) {
+        id = PQgetvalue(res, i, 0);
+        assert (id != NULL);
+        line_ids.insert(atoi(id));
+    }
+
+    PQclear(res);
+
+    return true;
+}
+
+string PG::_build_query(
+    const GEOSGeometry* geom,
+    bool within,
+    int limit,
+    bool id)
+{
+    GEOSWKTWriter* wkt_writer = GEOSWKTWriter_create_r(hdl);
+    char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
+
+    ostringstream oss;
+    oss << "SELECT " << (id ? "id" : "line2d_m") << " FROM way WHERE ";
+    if (!within) oss << " NOT ";
+    oss << "ST_SetSRID('" << hex << "'::geometry, 3395) ~ line2d_m ORDER BY id";
+    if (limit > 0) oss << " LIMIT " << limit;
+
+    GEOSFree_r(hdl, hex);
+    GEOSWKTWriter_destroy_r(hdl, wkt_writer);
+
+    return oss.str();
 }
 
 } // namespace cma
