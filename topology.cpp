@@ -1490,6 +1490,7 @@ void Topology::output_relations() const
 
 void Topology::_update_indexes(const edge* e)
 {
+    assert (e);
     assert (_edges.size() < 100000);
 
     bg::model::linestring<point> edgeLS;
@@ -1541,6 +1542,7 @@ void Topology::_update_indexes(const edge* e)
 
 void Topology::_update_indexes(const node* n)
 {
+    assert (n);
     assert (_nodes.size() < 100000);
 
     double x, y;
@@ -1754,6 +1756,7 @@ void Topology::rebuild_indexes()
     assert (_faces.size() == _left_faces_idx->size());
 
     for (const edge* e : _edges) {
+        if (!e) continue;
         _update_indexes(e);
         if ((*_face_geometries)[e->left_face]) {
             GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
@@ -1766,6 +1769,7 @@ void Topology::rebuild_indexes()
     }
 
     for (const node* n : _nodes) {
+        if (!n) continue;
         _update_indexes(n);
     }
 

@@ -15,6 +15,7 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/serialization/map.hpp>
+#include <boost/serialization/set.hpp>
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/string.hpp>
 
@@ -60,11 +61,12 @@ int main(int argc, char **argv)
         (*zonesPerProcess)[i] = 0;
     }
 
+    int processingLineCount = 0;
     if (world.rank() == 0) {
         std::vector<zoneInfo*> zones;
 
         GEOSGeometry* world_extent = world_geom();
-        prepare_zones(*geos, world_extent, zones, 10);
+        cout << "count: " << prepare_zones(*geos, world_extent, zones, 10) << endl;
         GEOSGeom_destroy_r(hdl, world_extent);
         // write_zones("output/test.shp", zones, true);
 
@@ -93,7 +95,6 @@ int main(int argc, char **argv)
         }
         zones.clear();
 
-        int processingLineCount = 0;
         for (int i = 0; i < zonesPerProcess->size(); ++i) {
             cout << "[0] Process " << i << " will process " << (*zonesPerProcess)[i]
                  << " lines." << endl;
@@ -114,6 +115,7 @@ int main(int argc, char **argv)
     delete zonesPerProcess;
 
     vector<Topology*> myTopologies;
+    unique_ptr< set<int> > myOrphans(new set<int>());
 
     for (auto& zone : myZones) {
         int zoneId = zone.first;
@@ -126,14 +128,19 @@ int main(int argc, char **argv)
             GEOSWKTReader_read_r(hdl, geos->text_reader(), hexWKT.c_str());
 
         linesV lines;
-        if (!db.get_lines_within(zoneGeom, lines)) {
+        if (!db.get_lines(zoneGeom, lines, true)) {
+            assert (false);
+        }
+
+        if (!db.get_line_ids(zoneGeom, *myOrphans, false)) {
             assert (false);
         }
 
         GEOSGeom_destroy_r(hdl, zoneGeom);
 
         cout << "[" << world.rank() << "] processing zone #" <<  zoneId
-             << " (" << lines.size() << " lines)" << endl;
+             << " (" << lines.size() << " lines, "
+             << myOrphans->size() << " orphans)" << endl;
 
         if (lines.size() == 0) {
             continue;
@@ -184,17 +191,41 @@ int main(int argc, char **argv)
             merge_topologies(*mainTopology, *otherTopology);
         }
 
-        mainTopology->output();
-
+        // TODO: gather all topologies (one process at a time?)
         /*
         for (int rank = 1; rank < world.rank(); ++rank) {
             vector<Topology> topologies;
             world.recv(rank, 0, topologies);
         }
         */
+
+        mainTopology->rebuild_indexes();
+
+        unique_ptr< vector< set<int> > > allOrphansV(new vector< set<int> >());
+        gather(world, *myOrphans, *allOrphansV, 0);
+
+        unique_ptr< set<int> > allOrphans(new set<int>());
+        for (auto& otherOrphans : *allOrphansV) {
+            allOrphans->insert(otherOrphans.begin(), otherOrphans.end());
+        }
+
+        cout << "Found a total of " << allOrphans->size() << " orphans." << endl;
+
+        vector<int> edgeIds;
+        for (int _id : *allOrphans) {
+            GEOSGeometry* line = db.get_line(_id);
+            cout << _id << ",";
+            mainTopology->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+        }
+
+        // FIXME: assert (allOrphans->size() == line_count-processingLineCount);
+
+        mainTopology->output();
     }
     else {
         // TODO: world.send to rank 0
+
+        gather(world, *myOrphans, 0);
     }
 
     for (Topology* t : myTopologies) {

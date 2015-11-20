@@ -13,7 +13,7 @@ namespace cma {
 
 extern GEOSContextHandle_t hdl;
 
-void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, std::vector<zoneInfo*>& zones, int maxdepth=1);
+int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, std::vector<zoneInfo*>& zones, int maxdepth=1);
 void write_zones(const std::string& filename, const std::vector<zoneInfo*>& zones, bool overwrite = true);
 
 /**

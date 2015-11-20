@@ -76,6 +76,28 @@ int PG::get_line_count()
     return atoi(count);
 }
 
+GEOSGeometry* PG::get_line(int id)
+{
+    ostringstream oss;
+    oss << "SELECT line2d_m FROM way WHERE id=" << id;
+
+    PGresult* res = query(oss.str().c_str());
+
+    if (!success(res)) {
+        PQclear(res);
+        return nullptr;
+    }
+
+    char* line2d;
+    GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
+    line2d = PQgetvalue(res, 0, 0);
+    GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, 0, 0));
+    assert (line != NULL);
+    GEOSWKBReader_destroy_r(hdl, wkb_reader);
+
+    return line;
+}
+
 bool PG::get_lines(
     const GEOSGeometry* geom,
     linesV& lines,
@@ -142,15 +164,21 @@ string PG::_build_query(
     GEOSWKTWriter* wkt_writer = GEOSWKTWriter_create_r(hdl);
     char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
 
+    ostringstream oss_geom;
+    oss_geom << " ST_SetSRID('" << hex << "'::geometry, 3395) ";
+
     ostringstream oss;
     oss << "SELECT " << (id ? "id" : "line2d_m") << " FROM way WHERE ";
     if (!within) oss << " NOT ";
-    oss << "ST_SetSRID('" << hex << "'::geometry, 3395) ~ line2d_m ORDER BY id";
+    oss << " ST_Contains(" << oss_geom.str() << ", line2d_m) ";
+    if (!within) oss << " AND ST_Intersects(" << oss_geom.str() << ", line2d_m) ";
+    oss << " ORDER BY id";
     if (limit > 0) oss << " LIMIT " << limit;
 
     GEOSFree_r(hdl, hex);
     GEOSWKTWriter_destroy_r(hdl, wkt_writer);
 
+    cout << oss.str() << endl;
     return oss.str();
 }
 

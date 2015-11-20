@@ -24,6 +24,8 @@ public:
     /**
      * Below are some geometry helpers.
      */
+    GEOSGeometry* get_line(int id);
+
     bool get_lines(
         const GEOSGeometry* envelope,
         linesV& lines,

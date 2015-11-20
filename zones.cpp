@@ -59,7 +59,7 @@ void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, doub
 }
 
 // void prepare_zones(const linesV& lines, const OGREnvelope& extent, vector<zoneInfo*>& zones, int maxdepth)
-void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo*>& zones, int maxdepth)
+int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo*>& zones, int maxdepth)
 {
     assert (extent);
     assert (maxdepth >= 1);
@@ -173,7 +173,7 @@ void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo
     GEOSFree_r(hdl, hex_extent);
 
     if (maxdepth == 1) {
-        return;
+        return sum_nb_lines;
     }
 
     vector<int>                 to_del;
@@ -184,7 +184,7 @@ void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo
         if (zone->second > 15000) {
             vector<zoneInfo*> subzones;
             GEOSGeometry* g = OGREnvelope2GEOSGeom(zone->first);
-            prepare_zones(geos, g, subzones, maxdepth-1);
+            sum_nb_lines += prepare_zones(geos, g, subzones, maxdepth-1);
             GEOSGeom_destroy_r(hdl, g);
 
             to_del.insert(to_del.begin(), zIdx);
@@ -193,12 +193,15 @@ void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo
     }
 
     for (int idx : to_del) {
+        sum_nb_lines -= zones[idx]->second;
         delete zones[idx];
         zones.erase(zones.begin() + idx);
     }
     for (auto subzones : to_add) {
         zones.insert(zones.end(), subzones.begin(), subzones.end());
     }
+
+    return sum_nb_lines;
 }
 
 void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bool overwrite)
