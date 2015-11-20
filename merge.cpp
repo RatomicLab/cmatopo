@@ -18,6 +18,9 @@ void merge_topologies(Topology& t1, Topology& t2)
     unique_ptr<itemid_map> edge_map(new itemid_map(t2._edges.size(), -1));
     unique_ptr<itemid_map> face_map(new itemid_map(t2._faces.size(), -1));
 
+    // universal face stays the same even after merge
+    (*face_map)[0] = 0;
+
     int newNodeId, nextNodeId;
     int newEdgeId, nextEdgeId;
     int newFaceId, nextFaceId;
@@ -43,7 +46,7 @@ void merge_topologies(Topology& t1, Topology& t2)
     }
 
     for (face* f : t2._faces) {
-        if (!f) continue;
+        if (!f || f->id == 0) continue;
 
         (*face_map)[f->id] = nextFaceId;
         f->id = nextFaceId++;
@@ -51,7 +54,7 @@ void merge_topologies(Topology& t1, Topology& t2)
     }
 
     for (int i = newEdgeId; i < t1._edges.size(); ++i) {
-        edge* e = t1._edges[newEdgeId];
+        edge* e = t1._edges[i];
         if (!e) continue;
 
         e->start_node = (*node_map)[e->start_node];
@@ -67,7 +70,7 @@ void merge_topologies(Topology& t1, Topology& t2)
         e->right_face = (*face_map)[e->right_face];
     }
 
-    t2._empty();
+    t2._empty(false);
 }
 
 }

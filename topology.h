@@ -224,9 +224,10 @@ void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls);
 template <class T>
 void Topology::delete_all(std::vector<T*>& v) {
     for (T* t : v) {
+        if (!t) continue;
         delete t;
     }
-    v.empty();
+    v.clear();
 }
 
 /**
