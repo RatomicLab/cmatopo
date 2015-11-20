@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     initGEOS(geos_message_function, geos_message_function);
     OGRRegisterAll();
 
-    GEOSHelper geos = GEOSHelper();
+    unique_ptr<GEOSHelper> geos(new GEOSHelper());
     assert (hdl != NULL);
 
     // vm with Quebec only: postgresql://postgres@192.168.56.101/postgis
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
         std::vector<zoneInfo*> zones;
 
         GEOSGeometry* world_extent = world_geom();
-        prepare_zones(geos, world_extent, zones, 10);
+        prepare_zones(*geos, world_extent, zones, 10);
         GEOSGeom_destroy_r(hdl, world_extent);
         // write_zones("output/test.shp", zones, true);
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv)
 
             GEOSGeometry* zoneGeom = OGREnvelope2GEOSGeom(z->first);
             (*processZones)[minProcess].push_back(
-                make_pair(zoneId++, geos.as_string(zoneGeom))
+                make_pair(zoneId++, geos->as_string(zoneGeom))
             );
             GEOSGeom_destroy_r(hdl, zoneGeom);
             delete z;
@@ -113,6 +113,8 @@ int main(int argc, char **argv)
     delete processZones;
     delete zonesPerProcess;
 
+    vector<Topology*> myTopologies;
+
     for (auto& zone : myZones) {
         int zoneId = zone.first;
         const string& hexWKT = zone.second;
@@ -121,7 +123,7 @@ int main(int argc, char **argv)
         start = chrono::system_clock::now();
 
         GEOSGeometry* zoneGeom =
-            GEOSWKTReader_read_r(hdl, geos.text_reader(), hexWKT.c_str());
+            GEOSWKTReader_read_r(hdl, geos->text_reader(), hexWKT.c_str());
 
         linesV lines;
         if (!db.get_lines_within(zoneGeom, lines)) {
@@ -137,7 +139,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        Topology* topology = new Topology(geos);
+        Topology* topology = new Topology(*geos);
 
         int lc = 0;
         for (GEOSGeometry* line : lines) {
@@ -147,7 +149,7 @@ int main(int argc, char **argv)
                 topology->commit();
             }
             catch (const invalid_argument& ex) {
-                cerr << geos.as_string(line) << ": " << ex.what() << endl;
+                cerr << geos->as_string(line) << ": " << ex.what() << endl;
                 topology->rollback();
             }
 
@@ -163,16 +165,42 @@ int main(int argc, char **argv)
         chrono::duration<double> elapsed_seconds = end-start;
         time_t end_time = chrono::system_clock::to_time_t(end);
 
-        topology->output_nodes();
-        topology->output_edges();
-        topology->output_faces();
-
         cout << "[" << world.rank() << "] finished computation of zone #" << zoneId
              << " at " << std::ctime(&end_time) << ","
              << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
 
-        delete topology;
+        myTopologies.push_back(topology);
+        myZones.pop_front();
     }
+
+    Topology* mainTopology = myTopologies[0];
+
+    if (world.rank() == 0) {
+        // merge my own topologies first
+        for (Topology* otherTopology : myTopologies) {
+            if (mainTopology == otherTopology) {
+                continue;
+            }
+            merge_topologies(*mainTopology, *otherTopology);
+        }
+
+        mainTopology->output();
+
+        /*
+        for (int rank = 1; rank < world.rank(); ++rank) {
+            vector<Topology> topologies;
+            world.recv(rank, 0, topologies);
+        }
+        */
+    }
+    else {
+        // TODO: world.send to rank 0
+    }
+
+    for (Topology* t : myTopologies) {
+        delete t;
+    }
+    myTopologies.clear();
 
     finishGEOS();
 
