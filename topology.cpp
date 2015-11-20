@@ -579,6 +579,9 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         for (relation* rel : _relations) {
             if (rel->element_id == oLeftFace && rel->element_id == 3) {
                 relation* nrel = new relation();
+                nrel->id = _relations.size();
+                nrel->topogeo_id = DEFAULT_TOPOGEO_ID;
+                nrel->layer_id = DEFAULT_LAYER_ID;
                 nrel->element_id = newFaceId;
                 nrel->element_type = 3;
 
@@ -1428,6 +1431,14 @@ int Topology::ST_AddIsoNode(int faceId, const GEOSGeom pt)
     add_node(newNode);
 
     return newNode->id;
+}
+
+void Topology::output() const
+{
+    output_nodes();
+    output_edges();
+    output_faces();
+    output_relations();
 }
 
 void Topology::output_nodes() const

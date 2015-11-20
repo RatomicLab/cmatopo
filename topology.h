@@ -21,6 +21,8 @@
 #include <transaction.h>
 
 #define DEFAULT_TOLERANCE 1.0
+#define DEFAULT_TOPOGEO_ID 1
+#define DEFAULT_LAYER_ID 1
 
 namespace cma {
 
