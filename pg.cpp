@@ -1,13 +1,18 @@
 #include <pg.h>
 
+#include <string>
 #include <cassert>
 #include <sstream>
 #include <iostream>
+
+#include <boost/algorithm/string/join.hpp>
 
 #include <zones.h>
 
 using namespace cma;
 using namespace std;
+
+using namespace boost::algorithm;
 
 namespace cma {
     extern GEOSContextHandle_t hdl;
@@ -152,6 +157,37 @@ bool PG::get_line_ids(
 
     PQclear(res);
 
+    return true;
+}
+
+bool PG::get_lines(const std::set<int> lineIds, linesV& lines)
+{
+    vector<string> ids;
+    transform(lineIds.begin(), lineIds.end(), back_inserter(ids), [](int a) {
+        return to_string(a);
+    });
+
+    ostringstream oss;
+    oss << "SELECT line2d_m FROM way WHERE id IN (" << join(ids, ",") << ")";
+
+    PGresult* res = query(oss.str().c_str());
+
+    if (!success(res)) {
+        PQclear(res);
+        return false;
+    }
+
+    char* line2d;
+    GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
+    for (int i = 0; i < PQntuples(res); i++) {
+        line2d = PQgetvalue(res, i, 0);
+        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 0));
+        assert (line != NULL);
+        lines.push_back(line);
+    }
+    GEOSWKBReader_destroy_r(hdl, wkb_reader);
+
+    PQclear(res);
     return true;
 }
 

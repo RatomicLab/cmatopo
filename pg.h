@@ -38,6 +38,10 @@ public:
         bool within=true,
         int limit=-1);
 
+    bool get_lines(
+        const std::set<int> lineIds,
+        linesV& lines);
+
 private:
     std::string _build_query(
         const GEOSGeometry* geom,
