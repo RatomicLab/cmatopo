@@ -4,6 +4,7 @@
 #include <geos_c.h>
 
 #include <string>
+#include <vector>
 #include <cassert>
 
 namespace cma {
@@ -85,6 +86,19 @@ template <class T>
 bool _is_null(T& val)
 {
     return (val == std::numeric_limits<T>::max());
+}
+
+/**
+ * Delete all elements of a pointer vector and empty it.
+ */
+template <class T>
+void delete_all(std::vector<T*>& v)
+{
+    for (T* t : v) {
+        if (!t) continue;
+        delete t;
+    }
+    v.clear();
 }
 
 } // namespace cma
