@@ -27,14 +27,17 @@ int prepare_zones(
     std::vector<zone*>& zones,
     std::vector<depth_group_t>& grouping,
     int maxdepth=1,
-    int* nextZoneId=nullptr
-);
+    int* nextZoneId=nullptr);
 
 void write_zones(
     const std::string& filename,
     const std::vector<zone*>& zones,
-    bool overwrite = true
-);
+    bool overwrite = true);
+
+void register_zones(
+    std::vector< std::vector<zone*> >& new_zones,
+    std::vector<zone*>& all_zones,
+    std::vector<zone*>& ordered_zones);
 
 /**
  * Return a geometry (polygon) which represents the entire world.

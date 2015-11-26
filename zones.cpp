@@ -217,6 +217,35 @@ void write_zones(const std::string& filename, const vector<zone*>& zones, bool o
     GDALClose(zonesDS);
 }
 
+void register_zones(
+    vector< vector<zone*> >& new_zones,
+    vector<zone*>& all_zones,
+    vector<zone*>& ordered_zones)
+{
+    for (int i = 0; i < new_zones.size(); ++i) {
+        for (zone* z : new_zones[i]) {
+            // insert the new zone at the original location
+            // in the ordered zones
+            ordered_zones.insert(
+                find_if(
+                    begin(ordered_zones),
+                    end(ordered_zones),
+                    [z](const zone* a) {
+                        return z->id() == a->id();
+                    }
+                ),
+                z
+            );
+        }
+        all_zones.insert(
+            end(all_zones),
+            new_zones[i].begin(),
+            new_zones[i].end()
+        );
+    }
+    new_zones.clear();
+}
+
 GEOSGeometry* world_geom()
 {
     OGREnvelope env;
