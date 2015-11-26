@@ -1,9 +1,13 @@
 #include <merge.h>
 
+#include <zones.h>
+
 #include <memory>
 #include <vector>
+#include <boost/mpi/communicator.hpp>
 
 using namespace std;
+using namespace boost::mpi;
 
 namespace cma {
 
@@ -73,4 +77,104 @@ void merge_topologies(Topology& t1, Topology& t2)
     t2._empty(false);
 }
 
+void merge_topologies(
+    const vector<zone*>& zones,
+    vector<Topology*>& topologies,
+    vector<zone*>& new_zones,
+    std::vector<Topology*>& new_topologies)
+{
+    communicator world;
+
+    assert (topologies.size() % 2 == 0);
+    for (int i = 0; i < topologies.size(); i+=2) {
+        Topology* t1 = topologies[i];
+        Topology* t2 = topologies[i+1];
+
+        cout << "[" << world.rank() << "] merging topologies for zones #"
+             << t1->zoneId() << " and #" << t2->zoneId() << endl;
+        merge_topologies(*t1, *t2);
+
+        zone* z1 = *find_if(zones.begin(), zones.end(),
+            [t1](const zone* z) {
+                return z->id() == t1->zoneId();
+            }
+        );
+        zone* z2 = *find_if(zones.begin(), zones.end(),
+            [t2](const zone* z) {
+                return z->id() == t2->zoneId();
+            }
+        );
+
+        OGREnvelope envelope = z1->envelope();
+        envelope.Merge(z2->envelope());
+        zone* merged_zone = new zone(t1->zoneId(), envelope);
+        merged_zone->count(z1->count() + z2->count());
+        new_zones.push_back(merged_zone);
+
+        delete t2;
+
+        cout << "[" << world.rank() << "] added new merged topology for"
+             << " zone #" << t1->zoneId() << endl;
+
+        new_topologies.push_back(t1);
+    }
+    topologies.clear();
 }
+
+void get_next_groups(
+    vector<depth_group_t> all_groups,
+    vector<depth_group_t> next_groups
+)
+{
+    int current_depth = all_groups[0].first;
+    next_groups.insert(
+        begin(next_groups),
+        all_groups.begin(),
+        find_if_not(
+            all_groups.begin(),
+            all_groups.end(),
+            [current_depth](const depth_group_t& g) {
+                return g.first == current_depth;
+            }
+        )
+    );
+
+    // TODO: to speed things up, also add zones which can
+    // be independently merged at other depths too
+}
+
+
+double width(const OGREnvelope& envelope)
+{
+    return envelope.MaxX - envelope.MinX;
+}
+
+double height(const OGREnvelope& envelope)
+{
+    return envelope.MaxY - envelope.MinY;
+}
+
+direction_type position(const OGREnvelope& e1, const OGREnvelope& e2)
+{
+    if (e1.MinX == e2.MinX && e1.MaxX == e2.MaxX) {
+        if (e1.MaxY == e2.MinY) {
+            return ABOVE;
+        }
+        if (e1.MinY == e2.MaxY) {
+            return BELOW;
+        }
+    }
+
+    if (e1.MinY == e2.MinY && e1.MaxY == e2.MaxY) {
+        if (e1.MaxX == e2.MinX) {
+            return RIGHT;
+        }
+        if (e1.MinX == e2.MaxX) {
+            return LEFT;
+        }
+    }
+
+    return OTHER;
+}
+
+} // namespace cma
