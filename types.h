@@ -21,7 +21,31 @@
 namespace cma {
 
 typedef std::vector<GEOSGeometry *> linesV;
-typedef std::pair<OGREnvelope, int> zoneInfo;
+
+class zone
+{
+    friend class boost::serialization::access;
+
+public:
+    zone();
+    zone(int id, OGREnvelope envelope);
+    ~zone();
+
+    int id() const;
+    int count() const;
+    void count(int c);
+    const OGREnvelope& envelope() const;
+    GEOSGeometry* geom();
+
+private:
+    int _id = -1;
+    int _count = 0;
+    OGREnvelope _envelope;
+    GEOSGeometry* _geom = nullptr;
+
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version);
+};
 
 class geom_container
 {
@@ -52,14 +76,15 @@ class geom_container
     template<class Archive>
     void save(Archive & ar, const unsigned int version) const
     {
+        size_t size = 0;
+
         if (!geom) {
-            ar & 0;
+            ar & size;
             return;
         }
 
         GEOSWKBWriter* wkbw = GEOSWKBWriter_create();
 
-        size_t size;
         unsigned char* bin = GEOSWKBWriter_write(wkbw, geom, &size);
         ar & size;
         for (int i = 0; i < size; ++i) {
@@ -229,9 +254,32 @@ private:
     }
 };
 
+template<class Archive>
+void zone::serialize(Archive & ar, const unsigned int version)
+{
+    ar & _id;
+    ar & _count;
+    ar & _envelope;
+}
+
 typedef std::set<int> edgeid_set;
 typedef std::shared_ptr<edgeid_set> edgeid_set_ptr;
 
 } // namespace cma
+
+namespace boost {
+namespace serialization {
+
+template<class Archive>
+void serialize(Archive& ar, OGREnvelope& g, const unsigned int version)
+{
+    ar & g.MinX;
+    ar & g.MaxX;
+    ar & g.MinY;
+    ar & g.MaxY;
+}
+
+} // namespace boost
+} // namespace serialization
 
 #endif // __CMA_TYPES_H

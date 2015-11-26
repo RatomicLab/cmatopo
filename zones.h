@@ -1,6 +1,7 @@
 #ifndef __CMA_ZONES_H
 #define __CMA_ZONES_H
 
+#include <array>
 #include <vector>
 #include <geos_c.h>
 #include <ogrsf_frmts.h>
@@ -11,10 +12,29 @@
 
 namespace cma {
 
+/**
+ * This is to store the spliting operattion so it can be merged
+ * back in the correct order.
+ */
+typedef std::array<int, 4> group_t;
+typedef std::pair<int, group_t> depth_group_t;
+
 extern GEOSContextHandle_t hdl;
 
-int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, std::vector<zoneInfo*>& zones, int maxdepth=1);
-void write_zones(const std::string& filename, const std::vector<zoneInfo*>& zones, bool overwrite = true);
+int prepare_zones(
+    GEOSHelper& geos,
+    const GEOSGeometry* extent,
+    std::vector<zone*>& zones,
+    std::vector<depth_group_t>& grouping,
+    int maxdepth=1,
+    int* nextZoneId=nullptr
+);
+
+void write_zones(
+    const std::string& filename,
+    const std::vector<zone*>& zones,
+    bool overwrite = true
+);
 
 /**
  * Return a geometry (polygon) which represents the entire world.
