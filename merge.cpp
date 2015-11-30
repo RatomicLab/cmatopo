@@ -4,6 +4,8 @@
 
 #include <memory>
 #include <vector>
+#include <functional>
+#include <boost/mpi/collectives.hpp>
 #include <boost/mpi/communicator.hpp>
 
 using namespace std;
@@ -77,53 +79,76 @@ void merge_topologies(Topology& t1, Topology& t2)
     t2._empty(false);
 }
 
-void merge_topologies(
-    const vector<zone*>& zones,
+int merge_topologies(
+    PG& db,
+    vector<zone*> zones,
     vector<Topology*>& topologies,
     vector<zone*>& new_zones,
-    std::vector<Topology*>& new_topologies)
+    vector<Topology*>& new_topologies)
 {
+    assert (new_zones.empty());
+
     communicator world;
 
-    assert (topologies.size() % 2 == 0);
-    for (int i = 0; i < topologies.size(); i+=2) {
-        Topology* t1 = topologies[i];
-        Topology* t2 = topologies[i+1];
+    int orphan_count = 0;
 
-        cout << "[" << world.rank() << "] merging topologies for zones #"
-             << t1->zoneId() << " and #" << t2->zoneId() << endl;
-        merge_topologies(*t1, *t2);
+    assert (topologies.size() % 4 == 0);
 
-        zone* z1 = *find_if(zones.begin(), zones.end(),
-            [t1](const zone* z) {
+    for (int i = 0; i < topologies.size()/4; ++i)
+    {
+        vector<zone*> temp_new_zones;
+        Topology* t[2] = {nullptr, nullptr};
+
+        for (int j = 0; j < 2; ++j)
+        {
+            Topology* t1 = topologies[i*4+j*2];
+            Topology* t2 = topologies[i*4+j*2+1];
+
+            orphan_count +=
+                _internal_merge(db, zones, t1, t2, temp_new_zones);
+
+            t[j] = t1;
+
+            zones.erase(find_if(zones.begin(), zones.end(), [t1](const zone* z) {
                 return z->id() == t1->zoneId();
-            }
-        );
-        zone* z2 = *find_if(zones.begin(), zones.end(),
-            [t2](const zone* z) {
+            }));
+            zones.erase(find_if(zones.begin(), zones.end(), [t2](const zone* z) {
                 return z->id() == t2->zoneId();
-            }
-        );
+            }));
+        }
+        assert (t[0] && t[1]);
+        assert (temp_new_zones.size() == 2);
 
-        OGREnvelope envelope = z1->envelope();
-        envelope.Merge(z2->envelope());
-        zone* merged_zone = new zone(t1->zoneId(), envelope);
-        merged_zone->count(z1->count() + z2->count());
-        new_zones.push_back(merged_zone);
+        // replace zones in the original vector with the new (temporary) ones
+        zones.insert(zones.end(), temp_new_zones.begin(), temp_new_zones.end());
 
-        delete t2;
+        orphan_count += _internal_merge(db, zones, t[0], t[1], new_zones);
 
-        cout << "[" << world.rank() << "] added new merged topology for"
-             << " zone #" << t1->zoneId() << endl;
+        zones.erase(find_if(zones.begin(), zones.end(), [t](const zone* z) {
+            return z->id() == t[0]->zoneId();
+        }));
+        zones.erase(find_if(zones.begin(), zones.end(), [t](const zone* z) {
+            return z->id() == t[1]->zoneId();
+        }));
+        zones.push_back(new_zones[new_zones.size()-1]);
 
-        new_topologies.push_back(t1);
+        // delete temporary zones
+        for (zone* z : temp_new_zones) {
+            delete z;
+        }
+
+        new_topologies.push_back(t[0]);
     }
     topologies.clear();
+
+    int total_orphan_count;
+    reduce(world, orphan_count, total_orphan_count, std::plus<int>(), 0);
+    return total_orphan_count;
 }
 
 void get_next_groups(
-    vector<depth_group_t> all_groups,
-    vector<depth_group_t> next_groups
+    vector<depth_group_t>& all_groups,
+    vector<depth_group_t>& next_groups
 )
 {
     int current_depth = all_groups[0].first;
@@ -141,6 +166,17 @@ void get_next_groups(
 
     // TODO: to speed things up, also add zones which can
     // be independently merged at other depths too
+
+    all_groups.erase(
+        begin(all_groups),
+        find_if_not(
+            begin(all_groups),
+            end(all_groups),
+            [current_depth](const depth_group_t& a) {
+                return a.first == current_depth;
+            }
+        )
+    );
 }
 
 
@@ -175,6 +211,51 @@ direction_type position(const OGREnvelope& e1, const OGREnvelope& e2)
     }
 
     return OTHER;
+}
+
+int _internal_merge(
+    PG& db,
+    vector<zone*>& zones,
+    Topology* t1,
+    Topology* t2,
+    vector<zone*>& new_zones)
+{
+    communicator world;
+
+    merge_topologies(*t1, *t2);
+    t1->rebuild_indexes();
+    t1->commit();
+
+    zone* z1 = get_zone_by_id(zones, t1->zoneId());
+    zone* z2 = get_zone_by_id(zones, t2->zoneId());
+
+    linesV orphans;
+    db.get_common_lines(z1->envelope(), z2->envelope(), orphans);
+    cout << "[" << world.rank() << "] adding " << orphans.size() << " lines to topology #"
+         << t1->zoneId() << " (lc: " << z1->count() << "+" << z2->count() << ")" << endl;
+
+    for (GEOSGeometry* line : orphans) {
+        vector<int> edgeIds;
+        try {
+            t1->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+            t1->commit();
+        }
+        catch (const invalid_argument& ex) {
+            t1->rollback();
+        }
+        GEOSGeom_destroy_r(hdl, line);
+    }
+
+    OGREnvelope envelope = z1->envelope();
+    envelope.Merge(z2->envelope());
+    zone* merged_zone = new zone(t1->zoneId(), envelope);
+    merged_zone->count(z1->count() + z2->count() + orphans.size());
+    new_zones.push_back(merged_zone);
+
+    cout << "[" << world.rank() << "] added new merged topology for"
+         << " zone #" << t1->zoneId() << " (lc: " << merged_zone->count() << ")" << endl;
+
+    return orphans.size();
 }
 
 } // namespace cma
