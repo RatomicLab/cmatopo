@@ -13,7 +13,7 @@
 namespace cma {
 
 /**
- * This is to store the spliting operattion so it can be merged
+ * This is to store the spliting operation so it can be merged
  * back in the correct order.
  */
 typedef std::array<int, 4> group_t;
@@ -38,6 +38,8 @@ void register_zones(
     std::vector< std::vector<zone*> >& new_zones,
     std::vector<zone*>& all_zones,
     std::vector<zone*>& ordered_zones);
+
+zone* get_zone_by_id(const std::vector<zone*>& zones, int zoneId);
 
 /**
  * Return a geometry (polygon) which represents the entire world.

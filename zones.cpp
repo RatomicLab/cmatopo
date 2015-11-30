@@ -98,10 +98,6 @@ int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent,
         local_extent.MinY = minY + row * local_height;
         local_extent.MaxY = local_extent.MinY + local_height;
 
-        GEOSGeometry* geom_extent = OGREnvelope2GEOSGeom(local_extent);
-        string local_wkt_extent = geos.as_string(geom_extent);
-        GEOSGeom_destroy_r(geos.handle(), geom_extent);
-
         int nextId;
         nextId = (*nextZoneId)++;
         zone* z = new zone(nextId, local_extent);
@@ -109,15 +105,19 @@ int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent,
         /**
          * This will select a line count of lines within our zone.
          */
+        GEOSGeometry* geom_extent = OGREnvelope2GEOSGeom(local_extent);
+        string pg_geom = db.build_pg_geom(geom_extent);
+        GEOSGeom_destroy_r(geos.handle(), geom_extent);
+
         ostringstream oss;
         oss << "SELECT COUNT(1) FROM way WHERE "
-            << "ST_SetSRID(ST_GeomFromText('" << local_wkt_extent
-            << "'), 3395) ~ line2d_m";
+            << pg_geom << " && line2d_m AND "
+            << "ST_Contains(" << pg_geom << ", line2d_m)";
 
         int nlines = 0;
 
         PGresult* res = db.query(oss.str().c_str());
-        z->count(z->count() + atoi(PQgetvalue(res, 0, 0)));
+        z->count(atoi(PQgetvalue(res, 0, 0)));
         PQclear(res);
 
         sum_nb_lines += z->count();
@@ -293,6 +293,21 @@ GEOSGeometry* OGREnvelope2GEOSGeom(const OGREnvelope& env)
 
     GEOSSetSRID_r(hdl, polygon, 3395);
     return polygon;
+}
+
+zone* get_zone_by_id(const vector<zone*>& zones, int zoneId)
+{
+    auto it = find_if(zones.begin(), zones.end(),
+        [zoneId](const zone* z) {
+            return z->id() == zoneId;
+        }
+    );
+
+    if (it == zones.end()) {
+        return nullptr;
+    }
+
+    return *it;
 }
 
 } // namespace cma
