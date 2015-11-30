@@ -133,6 +133,52 @@ bool PG::get_lines(
     return true;
 }
 
+bool PG::get_common_lines(
+    const OGREnvelope& env1,
+    const OGREnvelope& env2,
+    linesV& lines,
+    int limit)
+{
+    GEOSGeometry* g1 = OGREnvelope2GEOSGeom(env1);
+    GEOSGeometry* g2 = OGREnvelope2GEOSGeom(env2);
+
+    string env1_str = build_pg_geom(g1);
+    string env2_str = build_pg_geom(g2);
+
+    OGREnvelope m = env1;
+    m.Merge(env2);
+
+    GEOSGeometry* g3 = OGREnvelope2GEOSGeom(m);
+    string m_str = build_pg_geom(g3);
+
+    ostringstream oss;
+    oss << "SELECT line2d_m FROM way WHERE "
+        << m_str << " && line2d_m AND ST_Contains(" << m_str << ", line2d_m) AND "
+        << env1_str << " && line2d_m AND NOT ST_Contains(" << env1_str << ", line2d_m) AND "
+        << env2_str << " && line2d_m AND NOT ST_Contains(" << env2_str << ", line2d_m)";
+
+    PGresult* res = query(oss.str().c_str());
+
+    if (!success(res)) {
+        PQclear(res);
+        return false;
+    }
+
+    char* line2d;
+    GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
+    for (int i = 0; i < PQntuples(res); i++) {
+        line2d = PQgetvalue(res, i, 0);
+        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 0));
+        assert (line != NULL);
+        lines.push_back(line);
+    }
+    GEOSWKBReader_destroy_r(hdl, wkb_reader);
+
+    GEOSGeom_destroy_r(hdl, g1);
+    GEOSGeom_destroy_r(hdl, g2);
+    GEOSGeom_destroy_r(hdl, g3);
+}
+
 bool PG::get_line_ids(
     const GEOSGeometry* envelope,
     set<int>& line_ids,
@@ -197,25 +243,32 @@ string PG::_build_query(
     int limit,
     bool id)
 {
+    string geom_str = build_pg_geom(geom);
+
+    ostringstream oss;
+    oss << "SELECT " << (id ? "id" : "line2d_m") << " FROM way WHERE ";
+    if (!within) oss << " NOT ";
+    oss << " ST_Contains(" << geom_str << ", line2d_m) ";
+    if (!within) oss << " AND ST_Intersects(" << geom_str << ", line2d_m) ";
+    oss << " ORDER BY id";
+    if (limit > 0) oss << " LIMIT " << limit;
+
+    cout << oss.str() << endl;
+    return oss.str();
+}
+
+string PG::build_pg_geom(const GEOSGeometry* geom) const
+{
     GEOSWKTWriter* wkt_writer = GEOSWKTWriter_create_r(hdl);
     char* hex = GEOSWKTWriter_write_r(hdl, wkt_writer, geom);
 
     ostringstream oss_geom;
     oss_geom << " ST_SetSRID('" << hex << "'::geometry, 3395) ";
 
-    ostringstream oss;
-    oss << "SELECT " << (id ? "id" : "line2d_m") << " FROM way WHERE ";
-    if (!within) oss << " NOT ";
-    oss << " ST_Contains(" << oss_geom.str() << ", line2d_m) ";
-    if (!within) oss << " AND ST_Intersects(" << oss_geom.str() << ", line2d_m) ";
-    oss << " ORDER BY id";
-    if (limit > 0) oss << " LIMIT " << limit;
-
     GEOSFree_r(hdl, hex);
     GEOSWKTWriter_destroy_r(hdl, wkt_writer);
 
-    cout << oss.str() << endl;
-    return oss.str();
+    return oss_geom.str();
 }
 
 } // namespace cma
