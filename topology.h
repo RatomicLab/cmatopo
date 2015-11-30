@@ -10,8 +10,8 @@
 
 #include <boost/tuple/tuple.hpp>
 
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
 
 #include <boost/geometry.hpp>
 #include <boost/geometry/index/rtree.hpp>
@@ -47,8 +47,8 @@ typedef boost::geometry::model::d2::point_xy<double> point;
 typedef boost::geometry::model::box<point> box;
 typedef std::pair<box,   int> edge_value;
 typedef std::pair<point, int> node_value;
-typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<100000> > edge_idx_t;
-typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<100000> > node_idx_t;
+typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<150000000> > edge_idx_t;
+typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<150000000> > node_idx_t;
 
 /**
  * Other useful types.
@@ -75,9 +75,6 @@ public:
     Topology();
     Topology(GEOSHelper* geos);
     ~Topology();
-
-    template <class T>
-    void delete_all(std::vector<T*>& v);
 
     /**
      * Add an edge (and it's endpoints) to the topology.
@@ -122,6 +119,13 @@ public:
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);
 
+    int zoneId() const {
+        return _zoneId;
+    }
+    void zoneId(int zoneId) {
+        _zoneId = zoneId;
+    }
+
 private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
@@ -146,6 +150,11 @@ private:
      * GEOS helper class.
      */
     GEOSHelper* _geos = nullptr;
+
+    /**
+     * Associated zone id.
+     */
+    int _zoneId = -1;
 
     /**
      * Edge envelope index.
@@ -231,18 +240,6 @@ void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls);
  * Convert a GEOS geometry (GEOS_LINESTRING or GEOS_LINEARRING) to a Boost linestring.
  */
 void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls);
-
-/**
- * Delete all elements of a pointer vector and empty it.
- */
-template <class T>
-void Topology::delete_all(std::vector<T*>& v) {
-    for (T* t : v) {
-        if (!t) continue;
-        delete t;
-    }
-    v.clear();
-}
 
 /**
  * Return all items intersecting with geom in the given index.
@@ -336,6 +333,7 @@ void Topology::serialize(Archive & ar, const unsigned int version)
     ar & _edges;
     ar & _faces;
     ar & _relations;
+    ar & _zoneId;
 }
 
 } // namespace cma

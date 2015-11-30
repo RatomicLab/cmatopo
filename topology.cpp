@@ -11,7 +11,7 @@
 
 using namespace std;
 
-const int MAX_INDEX_ELEM = 100000;
+const int MAX_INDEX_ELEM = 150000000;
 
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
@@ -36,10 +36,7 @@ struct item_finder_predicate
 };
 
 Topology::Topology()
-: _nodes()
-, _edges()
-, _faces()
-, _relations()
+: Topology(nullptr)
 {
 }
 
@@ -63,19 +60,21 @@ Topology::Topology(GEOSHelper* geos)
 , _face_geometries(new vector<GEOSGeometry*>())
 , _gfg_geometries(new vector<GEOSGeometry*>())
 {
-    // edges and nodes cannot have id 0
-    _edges.push_back(NULL);
-    _nodes.push_back(NULL);
+    if (geos) {
+        // edges and nodes cannot have id 0
+        _edges.push_back(NULL);
+        _nodes.push_back(NULL);
 
-    // add the universal face
-    face* f = new face;
-    f->id = 0;
-    _faces.push_back(f);
+        // add the universal face
+        face* f = new face;
+        f->id = 0;
+        _faces.push_back(f);
 
-    _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
-    _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+        _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+        _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
 
-    _face_geometries->push_back(nullptr);
+        _face_geometries->push_back(nullptr);
+    }
 }
 
 Topology::~Topology()
@@ -1499,7 +1498,7 @@ void Topology::output_relations() const
 void Topology::_update_indexes(const edge* e)
 {
     assert (e);
-    assert (_edges.size() < 100000);
+    assert (_edges.size() < MAX_INDEX_ELEM);
 
     bg::model::linestring<point> edgeLS;
 
@@ -1551,7 +1550,7 @@ void Topology::_update_indexes(const edge* e)
 void Topology::_update_indexes(const node* n)
 {
     assert (n);
-    assert (_nodes.size() < 100000);
+    assert (_nodes.size() < MAX_INDEX_ELEM);
 
     double x, y;
     GEOSGeomGetX_r(hdl, n->geom, &x);
@@ -1743,6 +1742,8 @@ void Topology::rollback()
 
 void Topology::rebuild_indexes()
 {
+    assert (_transactions->empty());
+
     int faceCount = _faces.size();
     for (int i = 0 ; i < faceCount; ++i) {
         assert (_left_faces_idx->size() == _right_faces_idx->size());
@@ -1789,6 +1790,8 @@ void Topology::rebuild_indexes()
             (*_face_geometries)[i] = nullptr;
         }
     }
+
+    commit();
 }
 
 void Topology::output_edges() const
