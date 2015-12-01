@@ -99,17 +99,13 @@ class AddRelationTransaction : public TopologyTransaction
 public:
     AddRelationTransaction(
         Topology& topology,
-        int topogeoId,
-        int elementId,
-        int elementType);
+        relation *r);
     ~AddRelationTransaction();
 
     void rollback();
 
 private:
-    int _topogeoId;
-    int _elementId;
-    int _elementType;
+    relation* _relation;
 };
 
 } // namespace cma

@@ -23,40 +23,75 @@ void merge_topologies(Topology& t1, Topology& t2)
     unique_ptr<itemid_map> node_map(new itemid_map(t2._nodes.size(), -1));
     unique_ptr<itemid_map> edge_map(new itemid_map(t2._edges.size(), -1));
     unique_ptr<itemid_map> face_map(new itemid_map(t2._faces.size(), -1));
+    unique_ptr<itemid_map> relation_map(new itemid_map(t2._relations.size(), -1));
 
     // universal face stays the same even after merge
     (*face_map)[0] = 0;
 
-    int newNodeId, nextNodeId;
+    int nextNodeId;
     int newEdgeId, nextEdgeId;
-    int newFaceId, nextFaceId;
+    int nextFaceId;
+    int nextTopogeoId;
 
-    newNodeId = nextNodeId = t1._nodes.size();
+    nextNodeId = t1._nodes.size();
     newEdgeId = nextEdgeId = t1._edges.size();
-    newFaceId = nextFaceId = t1._faces.size();
+    nextFaceId = t1._faces.size();
+    nextTopogeoId = t1._relations.size();
 
-    for (node* n : t2._nodes) {
-        if (!n) continue;
-
-        (*node_map)[n->id] = nextNodeId;
-        n->id = nextNodeId++;
+    for (int nodeId = 1; nodeId < t2._nodes.size(); ++nodeId) {
+        node* n = t2._nodes[nodeId];
+        if (n) {
+            (*node_map)[n->id] = nextNodeId;
+            n->id = nextNodeId;
+        }
         t1._nodes.push_back(n);
+        ++nextNodeId;
     }
 
-    for (edge* e : t2._edges) {
-        if (!e) continue;
-
-        (*edge_map)[e->id] = nextEdgeId;
-        e->id = nextEdgeId++;
+    for (int edgeId = 1; edgeId < t2._edges.size(); ++edgeId) {
+        edge* e = t2._edges[edgeId];
+        if (e) {
+            (*edge_map)[e->id] = nextEdgeId;
+            e->id = nextEdgeId;
+        }
         t1._edges.push_back(e);
+        ++nextEdgeId;
     }
 
     for (face* f : t2._faces) {
-        if (!f || f->id == 0) continue;
+        if (f->id == 0) continue;
 
-        (*face_map)[f->id] = nextFaceId;
-        f->id = nextFaceId++;
+        if (f) {
+            (*face_map)[f->id] = nextFaceId;
+            f->id = nextFaceId;
+        }
         t1._faces.push_back(f);
+        ++nextFaceId;
+    }
+
+    for (int topogeoId = 1; topogeoId < t2._relations.size(); ++topogeoId) {
+        (*relation_map)[topogeoId] = nextTopogeoId;
+
+        vector<relation*>* relations = t2._relations[topogeoId];
+        if (relations) {
+            for (relation* r : *relations) {
+                r->topogeo_id = nextTopogeoId;
+                switch (r->element_type)
+                {
+                case 2:     // LINESTRING (edge)
+                    r->element_id = (*edge_map)[r->element_id];
+                    break;
+                case 3:     // FACE
+                    r->element_id = (*face_map)[r->element_id];
+                    break;
+                default:
+                    assert (false);
+                }
+            }
+        }
+
+        t1._relations.push_back(relations);
+        ++nextTopogeoId;
     }
 
     for (int i = newEdgeId; i < t1._edges.size(); ++i) {

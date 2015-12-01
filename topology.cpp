@@ -133,8 +133,6 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
 {
     assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
 
-    vector<int> edgeIds;
-
     // cout << "Topology::TopoGeo_AddLineString(" << _geos->as_string(line) << ")" << endl;
 
     if (tolerance <= 0) {
@@ -231,6 +229,8 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
 
     assert (noded);
 
+    int topogeoId = _relations.size();
+
     // 3. For each (now-noded) segment, insert an edge
     vector<edge_value> results_s;
     int nbNodes = GEOSGetNumGeometries_r(hdl, noded);
@@ -275,9 +275,10 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
             }
         }
 
+        int newEdgeId = NULLint;
         if (_is_null(edgeId)) {
             try {
-                edgeIds.push_back(ST_AddEdgeModFace(start_node, end_node, snapped));
+                newEdgeId = ST_AddEdgeModFace(start_node, end_node, snapped);
             }
             catch (const exception&) {
                 GEOSGeom_destroy_r(hdl, noded);
@@ -286,23 +287,21 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
             }
         }
         else {
-            edgeIds.push_back(edgeId);
+            newEdgeId = edgeId;
             GEOSGeom_destroy_r(hdl, snapped);
         }
-    }
-    GEOSGeom_destroy_r(hdl, noded);
 
-    int topogeoId = _relations.size();
-    vector<relation*>* relations = new vector<relation*>;
-    for (int edgeId : edgeIds) {
+        assert (!_is_null(newEdgeId));
+
         relation* r = new relation;
         r->topogeo_id = topogeoId;
         r->layer_id = 1;
-        r->element_id = edgeId;
+        r->element_id = newEdgeId;
         r->element_type = 2;     // LINESTRING
-        relations->push_back(r);
+
+        add_relation(topogeoId, r);
     }
-    add_relation(topogeoId, relations);
+    GEOSGeom_destroy_r(hdl, noded);
 
     ++_totalCount;
 }
@@ -614,15 +613,6 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
                     nrel->layer_id = rel->layer_id;
                     nrel->element_id = newFaceId;
                     nrel->element_type = 3;
-
-                    _transactions->push_back(
-                        new AddRelationTransaction(
-                            *this,
-                            nrel->topogeo_id,
-                            nrel->element_id,
-                            nrel->element_type
-                        )
-                    );
 
                     add_relation(nrel->topogeo_id, nrel);
                 }
@@ -1215,15 +1205,6 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
                 nrel->element_id = r->element_id < 0 ? -newEdge->id : newEdge->id;
                 nrel->element_type = r->element_type;
 
-                _transactions->push_back(
-                    new AddRelationTransaction(
-                        *this,
-                        nrel->topogeo_id,
-                        nrel->element_id,
-                        nrel->element_type
-                    )
-                );
-
                 add_relation(nrel->topogeo_id, nrel);
             }
         }
@@ -1710,17 +1691,18 @@ void Topology::add_relation(int topogeoId, relation* r)
 {
     assert (r);
     assert (r->topogeo_id == topogeoId);
+
+    if (topogeoId == _relations.size()) {
+        _relations.push_back(new vector<relation*>);
+    }
+    else if (!_relations[topogeoId]) {
+        _relations[topogeoId] = new vector<relation*>;
+    }
     assert (topogeoId < _relations.size());
 
+    _transactions->push_back(new AddRelationTransaction(*this, r));
+
     _relations[topogeoId]->push_back(r);
-}
-
-void Topology::add_relation(int topogeoId, vector<relation*>* relations)
-{
-    assert (relations);
-    assert (topogeoId == _relations.size());
-
-    _relations.push_back(relations);
 }
 
 void Topology::remove_edge(int edgeId)

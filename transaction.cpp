@@ -141,16 +141,11 @@ void RemoveFaceIndexTransaction::rollback()
     }
 }
 
-AddRelationTransaction::AddRelationTransaction(
-    Topology& topology,
-    int topogeoId,
-    int elementId,
-    int elementType)
+AddRelationTransaction::AddRelationTransaction(Topology& topology, relation* r)
 : TopologyTransaction(topology)
-, _topogeoId(topogeoId)
-, _elementId(elementId)
-, _elementType(elementType)
+, _relation(r)
 {
+    assert (_relation);
 }
 
 AddRelationTransaction::~AddRelationTransaction()
@@ -159,18 +154,14 @@ AddRelationTransaction::~AddRelationTransaction()
 
 void AddRelationTransaction::rollback()
 {
-    assert (_topogeoId < _topology._relations.size());
+    int topogeoId = _relation->topogeo_id;
 
-    vector<relation*>* relations = _topology._relations[_topogeoId];
+    assert (topogeoId < _topology._relations.size());
+    assert (_topology._relations[topogeoId]);
 
-    auto it = find_if(
-        relations->begin(),
-        relations->end(),
-        [this](const relation* r) {
-            return r->element_id == this->_elementId &&
-                r->element_type == this->_elementType;
-        }
-    );
+    vector<relation*>* relations = _topology._relations[topogeoId];
+
+    auto it = find(relations->begin(), relations->end(), _relation);
     assert (it != relations->end());
 
     delete *it;
@@ -178,7 +169,7 @@ void AddRelationTransaction::rollback()
 
     if (relations->empty()) {
         delete relations;
-        _topology._relations[_topogeoId] = nullptr;
+        _topology._relations[topogeoId] = nullptr;
     }
 }
 
