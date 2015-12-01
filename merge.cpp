@@ -235,9 +235,8 @@ int _internal_merge(
          << t1->zoneId() << " (lc: " << z1->count() << "+" << z2->count() << ")" << endl;
 
     for (GEOSGeometry* line : orphans) {
-        vector<int> edgeIds;
         try {
-            t1->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+            t1->TopoGeo_AddLineString(line, DEFAULT_TOLERANCE);
             t1->commit();
         }
         catch (const invalid_argument& ex) {

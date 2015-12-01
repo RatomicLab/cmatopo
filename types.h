@@ -236,7 +236,6 @@ class relation
     friend class boost::serialization::access;
 
 public:
-    int id = NULLint;     // convenience, not in original table
     int topogeo_id = NULLint;
     int layer_id = NULLint;
     int element_id = NULLint;
@@ -246,7 +245,6 @@ private:
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version)
     {
-        ar & id;
         ar & topogeo_id;
         ar & layer_id;
         ar & element_id;

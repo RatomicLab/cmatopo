@@ -173,9 +173,8 @@ int main(int argc, char **argv)
 
         int lc = 0;
         for (GEOSGeometry* line : lines) {
-            vector<int> edgeIds;
             try {
-                topology->TopoGeo_AddLineString(line, edgeIds, DEFAULT_TOLERANCE);
+                topology->TopoGeo_AddLineString(line, DEFAULT_TOLERANCE);
                 topology->commit();
             }
             catch (const invalid_argument& ex) {

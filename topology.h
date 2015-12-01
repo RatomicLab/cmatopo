@@ -79,7 +79,7 @@ public:
     /**
      * Add an edge (and it's endpoints) to the topology.
      */
-    void TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance=0.);
+    void TopoGeo_AddLineString(GEOSGeom line, double tolerance=0.);
     int ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom);
 
     /*****************/
@@ -130,7 +130,7 @@ private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
     std::vector<face*> _faces;
-    std::vector<relation*> _relations;
+    std::vector< std::vector<relation*>* > _relations;
 
     /**
      * Rollback data members
@@ -205,6 +205,8 @@ private:
     void add_edge(edge* e);
     void add_node(node* n);
     void add_face(face* f);
+    void add_relation(int topogeoId, relation* r);
+    void add_relation(int topogeoId, std::vector<relation*>* relations);
 
     void remove_edge(int edgeId);
     void remove_node(int nodeId);

@@ -143,10 +143,13 @@ void RemoveFaceIndexTransaction::rollback()
 
 AddRelationTransaction::AddRelationTransaction(
     Topology& topology,
-    int relationId
-)
+    int topogeoId,
+    int elementId,
+    int elementType)
 : TopologyTransaction(topology)
-, _relationId(relationId)
+, _topogeoId(topogeoId)
+, _elementId(elementId)
+, _elementType(elementType)
 {
 }
 
@@ -156,12 +159,27 @@ AddRelationTransaction::~AddRelationTransaction()
 
 void AddRelationTransaction::rollback()
 {
-    assert (_relationId < _topology._relations.size());
+    assert (_topogeoId < _topology._relations.size());
 
-    relation* rel = _topology._relations[_relationId];
-    assert (rel && rel->id == _relationId);
-    _topology._relations[_relationId] = nullptr;
-    delete rel;
+    vector<relation*>* relations = _topology._relations[_topogeoId];
+
+    auto it = find_if(
+        relations->begin(),
+        relations->end(),
+        [this](const relation* r) {
+            return r->element_id == this->_elementId &&
+                r->element_type == this->_elementType;
+        }
+    );
+    assert (it != relations->end());
+
+    delete *it;
+    relations->erase(it);
+
+    if (relations->empty()) {
+        delete relations;
+        _topology._relations[_topogeoId] = nullptr;
+    }
 }
 
 } // namespace cma
