@@ -5,3 +5,4 @@ core-*
 .gdb_history
 *.txt
 *.csv
+*.ser

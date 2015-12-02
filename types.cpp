@@ -1,4 +1,5 @@
 #include <types.h>
+#include <zones.h>
 
 #include <cassert>
 
@@ -7,6 +8,51 @@ namespace cma {
 }
 
 namespace cma {
+
+zone::zone()
+{
+}
+
+zone::zone(int id, OGREnvelope envelope)
+: _id(id)
+, _envelope(envelope)
+{
+}
+
+zone::~zone()
+{
+    if (_geom) {
+        GEOSGeom_destroy_r(hdl, _geom);
+    }
+}
+
+int zone::id() const
+{
+    return _id;
+}
+
+int zone::count() const
+{
+    return _count;
+}
+
+void zone::count(int c)
+{
+    _count = c;
+}
+
+const OGREnvelope& zone::envelope() const
+{
+    return _envelope;
+}
+
+GEOSGeometry* zone::geom()
+{
+    if (!_geom) {
+        _geom = OGREnvelope2GEOSGeom(_envelope);
+    }
+    return _geom;
+}
 
 const GEOSPreparedGeometry* geom_container::prepared()
 {

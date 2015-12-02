@@ -10,6 +10,9 @@
 
 #include <boost/tuple/tuple.hpp>
 
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+
 #include <boost/geometry.hpp>
 #include <boost/geometry/index/rtree.hpp>
 #include <boost/geometry/geometries/point_xy.hpp>
@@ -46,8 +49,8 @@ typedef boost::geometry::model::d2::point_xy<double> point;
 typedef boost::geometry::model::box<point> box;
 typedef std::pair<box,   int> edge_value;
 typedef std::pair<point, int> node_value;
-typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<100000> > edge_idx_t;
-typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<100000> > node_idx_t;
+typedef boost::geometry::index::rtree< edge_value, boost::geometry::index::rstar<150000000> > edge_idx_t;
+typedef boost::geometry::index::rtree< node_value, boost::geometry::index::rstar<150000000> > node_idx_t;
 
 /**
  * Other useful types.
@@ -58,6 +61,8 @@ typedef boost::geometry::model::multi_linestring<linestring> multi_linestring;
 
 class Topology
 {
+    friend class boost::serialization::access;
+
     friend class FaceTransaction;
     friend class EdgeTransaction;
     friend class NodeTransaction;
@@ -66,17 +71,17 @@ class Topology
     friend class RemoveFaceIndexTransaction;
     friend class AddRelationTransaction;
 
-public:
-    Topology(GEOSHelper& geos);
-    ~Topology();
+    friend void merge_topologies(Topology&, Topology&);
 
-    template <class T>
-    void delete_all(std::vector<T*>& v);
+public:
+    Topology();
+    Topology(GEOSHelper* geos);
+    ~Topology();
 
     /**
      * Add an edge (and it's endpoints) to the topology.
      */
-    void TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance=0.);
+    void TopoGeo_AddLineString(GEOSGeom line, double tolerance=0.);
     int ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom);
 
     /*****************/
@@ -105,6 +110,8 @@ public:
     void commit();
     void rollback();
 
+    void rebuild_indexes();
+
     void output() const;
     void output_nodes() const;
     void output_edges() const;
@@ -114,11 +121,25 @@ public:
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);
 
+    int zoneId() const {
+        return _zoneId;
+    }
+    void zoneId(int zoneId) {
+        _zoneId = zoneId;
+    }
+
+    /**
+     * The total number of lines added (or not) to this topology.
+     */
+    uint64_t count() const {
+        return _totalCount;
+    }
+
 private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
     std::vector<face*> _faces;
-    std::vector<relation*> _relations;
+    std::vector< std::vector<relation*>* > _relations;
 
     /**
      * Rollback data members
@@ -137,7 +158,12 @@ private:
     /**
      * GEOS helper class.
      */
-    GEOSHelper& _geos;
+    GEOSHelper* _geos = nullptr;
+
+    /**
+     * Associated zone id.
+     */
+    int _zoneId = -1;
 
     /**
      * Edge envelope index.
@@ -188,15 +214,22 @@ private:
     void add_edge(edge* e);
     void add_node(node* n);
     void add_face(face* f);
+    void add_relation(int topogeoId, relation* r);
+    void add_relation(int topogeoId, std::vector<relation*>* relations);
 
     void remove_edge(int edgeId);
     void remove_node(int nodeId);
     void remove_face(int faceId);
 
+    void _update_indexes(const edge* e);
+    void _update_indexes(const node* e);
+
     void _update_left_face(edge* e, int faceId);
     void _update_right_face(edge* e, int faceId);
 
     void _face_edges(int faceId, edgeid_set& edges);
+
+    void _empty(bool free_items=true);
 
     int _ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly);
     void GetRingEdges(int edgeId, std::vector<int>& ringEdgeIds, int maxEdges=NULLint);
@@ -204,6 +237,9 @@ private:
 
     template <class IndexType, class Value>
     void _intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& ids, double tolerance = 0.);
+
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version);
 };
 
 /**
@@ -215,17 +251,6 @@ void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls);
  * Convert a GEOS geometry (GEOS_LINESTRING or GEOS_LINEARRING) to a Boost linestring.
  */
 void GEOM2BOOSTLS(const GEOSGeometry* in, linestring& ls);
-
-/**
- * Delete all elements of a pointer vector and empty it.
- */
-template <class T>
-void Topology::delete_all(std::vector<T*>& v) {
-    for (T* t : v) {
-        delete t;
-    }
-    v.empty();
-}
 
 /**
  * Return all items intersecting with geom in the given index.
@@ -310,6 +335,16 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
             return a.second;
         });
     }
+}
+
+template<class Archive>
+void Topology::serialize(Archive & ar, const unsigned int version)
+{
+    ar & _nodes;
+    ar & _edges;
+    ar & _faces;
+    ar & _relations;
+    ar & _zoneId;
 }
 
 } // namespace cma

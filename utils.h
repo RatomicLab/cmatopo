@@ -4,6 +4,7 @@
 #include <geos_c.h>
 
 #include <string>
+#include <vector>
 #include <cassert>
 
 namespace cma {
@@ -66,6 +67,16 @@ public:
         return wkt;
     }
 
+    std::string as_hex_string(const GEOSGeometry* geom) {
+        assert (geom);
+        // GEOSWKTWriter_setRoundingPrecision_r(hdl, text_writer(), 15);
+        size_t size;
+        unsigned char* hex_c = GEOSWKBWriter_writeHEX_r(hdl, writer(), geom, &size);
+        std::string hex((char*)hex_c, size);
+        GEOSFree_r(hdl, hex_c);
+        return hex;
+    }
+
     void print_geom(const GEOSGeometry* geom);
 
 private:
@@ -85,6 +96,19 @@ template <class T>
 bool _is_null(T& val)
 {
     return (val == std::numeric_limits<T>::max());
+}
+
+/**
+ * Delete all elements of a pointer vector and empty it.
+ */
+template <class T>
+void delete_all(std::vector<T*>& v)
+{
+    for (T* t : v) {
+        if (!t) continue;
+        delete t;
+    }
+    v.clear();
 }
 
 } // namespace cma

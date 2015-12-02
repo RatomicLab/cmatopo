@@ -11,7 +11,7 @@
 
 using namespace std;
 
-const int MAX_INDEX_ELEM = 100000;
+const int MAX_INDEX_ELEM = 150000000;
 
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
@@ -35,7 +35,12 @@ struct item_finder_predicate
     }
 };
 
-Topology::Topology(GEOSHelper& geos)
+Topology::Topology()
+: Topology(nullptr)
+{
+}
+
+Topology::Topology(GEOSHelper* geos)
 : _nodes()
 , _edges()
 , _faces()
@@ -55,19 +60,22 @@ Topology::Topology(GEOSHelper& geos)
 , _face_geometries(new vector<GEOSGeometry*>())
 , _gfg_geometries(new vector<GEOSGeometry*>())
 {
-    // edges and nodes cannot have id 0
-    _edges.push_back(NULL);
-    _nodes.push_back(NULL);
+    if (geos) {
+        // edges and nodes cannot have id 0
+        _edges.push_back(nullptr);
+        _nodes.push_back(nullptr);
+        _relations.push_back(nullptr);
 
-    // add the universal face
-    face* f = new face;
-    f->id = 0;
-    _faces.push_back(f);
+        // add the universal face
+        face* f = new face;
+        f->id = 0;
+        _faces.push_back(f);
 
-    _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
-    _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+        _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+        _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
 
-    _face_geometries->push_back(nullptr);
+        _face_geometries->push_back(nullptr);
+    }
 }
 
 Topology::~Topology()
@@ -111,14 +119,21 @@ Topology::~Topology()
     delete_all(_nodes);
     delete_all(_edges);
     delete_all(_faces);
-    delete_all(_relations);
+
+    for (vector<relation*>* v : _relations) {
+        if (v) {
+            delete_all(*v);
+            delete v;
+        }
+    }
+    _relations.clear();
 }
 
-void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, double tolerance)
+void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
 {
     assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
 
-    // cout << "Topology::TopoGeo_AddLineString(" << _geos.as_string(line) << ")" << endl;
+    // cout << "Topology::TopoGeo_AddLineString(" << _geos->as_string(line) << ")" << endl;
 
     if (tolerance <= 0) {
         tolerance = _ST_MinTolerance(line);
@@ -214,6 +229,8 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
 
     assert (noded);
 
+    int topogeoId = _relations.size();
+
     // 3. For each (now-noded) segment, insert an edge
     vector<edge_value> results_s;
     int nbNodes = GEOSGetNumGeometries_r(hdl, noded);
@@ -258,9 +275,10 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
             }
         }
 
+        int newEdgeId = NULLint;
         if (_is_null(edgeId)) {
             try {
-                edgeIds.push_back(ST_AddEdgeModFace(start_node, end_node, snapped));
+                newEdgeId = ST_AddEdgeModFace(start_node, end_node, snapped);
             }
             catch (const exception&) {
                 GEOSGeom_destroy_r(hdl, noded);
@@ -269,9 +287,19 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, std::vector<int>& edgeIds, d
             }
         }
         else {
-            edgeIds.push_back(edgeId);
+            newEdgeId = edgeId;
             GEOSGeom_destroy_r(hdl, snapped);
         }
+
+        assert (!_is_null(newEdgeId));
+
+        relation* r = new relation;
+        r->topogeo_id = topogeoId;
+        r->layer_id = 1;
+        r->element_id = newEdgeId;
+        r->element_type = 2;     // LINESTRING
+
+        add_relation(topogeoId, r);
     }
     GEOSGeom_destroy_r(hdl, noded);
 
@@ -295,7 +323,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     }
 
     //cout << "ST_AddEdgeModFace(" << start_node << ", " << end_node << ", "
-    //     << _geos.as_string(geom) << ")" << endl;
+    //     << _geos->as_string(geom) << ")" << endl;
 
     edge* newEdge = new edge();
     newEdge->id = _edges.size();
@@ -576,23 +604,24 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     }
 
     if (oLeftFace != 0) {
-        for (relation* rel : _relations) {
-            if (rel->element_id == oLeftFace && rel->element_id == 3) {
-                relation* nrel = new relation();
-                nrel->id = _relations.size();
-                nrel->topogeo_id = DEFAULT_TOPOGEO_ID;
-                nrel->layer_id = DEFAULT_LAYER_ID;
-                nrel->element_id = newFaceId;
-                nrel->element_type = 3;
+        for (int topogeoId = 1; topogeoId < _relations.size(); ++topogeoId)
+        {
+            vector<relation*>* relations = _relations[topogeoId];
+            if (!relations) continue;
 
-                _transactions->push_back(
-                    new AddRelationTransaction(
-                        *this,
-                        nrel->id
-                    )
-                );
+            int relcount = relations->size();
+            for (int i = 0; i < relcount; ++i) {
+                relation* rel = (*relations)[i];
+                if (rel->element_id == oLeftFace && rel->element_id == 3)
+                {
+                    relation* nrel = new relation();
+                    nrel->topogeo_id = rel->topogeo_id;
+                    nrel->layer_id = rel->layer_id;
+                    nrel->element_id = newFaceId;
+                    nrel->element_type = 3;
 
-                _relations.push_back(nrel);
+                    add_relation(nrel->topogeo_id, nrel);
+                }
             }
         }
     }
@@ -1172,12 +1201,25 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
         }
     }
 
-    for (relation* r : _relations) {
-        if (abs(r->element_id) == edgeId && r->element_type == 2) {
-            relation* nrel = new relation;
-            nrel->element_id = r->element_id < 0 ? -newEdge->id : newEdge->id;
-            nrel->element_type = r->element_type;
-            _relations.push_back(nrel);
+    for (int topogeoId = 1; topogeoId < _relations.size(); ++topogeoId)
+    {
+        vector<relation*>* relations = _relations[topogeoId];
+        if (!relations) continue;
+
+        int relcount = relations->size();
+        for (int i = 0; i < relcount; ++i)
+        {
+            relation* rel = (*relations)[i];
+            if (abs(rel->element_id) == edgeId && rel->element_type == 2)
+            {
+                relation* nrel = new relation;
+                nrel->topogeo_id = rel->topogeo_id;
+                nrel->layer_id = rel->layer_id;
+                nrel->element_id = rel->element_id < 0 ? -newEdge->id : newEdge->id;
+                nrel->element_type = rel->element_type;
+
+                add_relation(nrel->topogeo_id, nrel);
+            }
         }
     }
 
@@ -1306,7 +1348,7 @@ int Topology::TopoGeo_AddPoint(GEOSGeom geom, double tolerance)
     assert (geom);
     assert (GEOSGeomTypeId_r(hdl, geom) == GEOS_POINT);
 
-    // cout << "Topoogy::TopoGeo_AddPoint(" << _geos.as_string(geom) << ")" << endl;
+    // cout << "Topoogy::TopoGeo_AddPoint(" << _geos->as_string(geom) << ")" << endl;
 
     if (tolerance == 0.) {
         tolerance = _ST_MinTolerance(geom);
@@ -1450,8 +1492,8 @@ void Topology::output_nodes() const
 
     for (const node* n : _nodes) {
         if (!n) continue;
-        cout << n->id << " | " << n->containing_face << " | " << _geos.as_string(n->geom) << endl;
-        fs << n->id << "|" << (_is_null(n->containing_face) ? "" : to_string(n->containing_face)) << "|" << _geos.as_string(n->geom) << endl;
+        cout << n->id << " | " << n->containing_face << " | " << _geos->as_string(n->geom) << endl;
+        fs << n->id << "|" << (_is_null(n->containing_face) ? "" : to_string(n->containing_face)) << "|" << _geos->as_string(n->geom) << endl;
     }
 
     fs.close();
@@ -1465,8 +1507,8 @@ void Topology::output_faces() const
     cout << "face_id | mbr (as text)" << endl;
     for (const face* f : _faces) {
         if (!f) continue;
-        cout << f->id << " | " << (f->geom ? _geos.as_string(f->geom) : "") << endl;
-        fs <<  f->id << "|" << (f->geom ? _geos.as_string(f->geom) : "") << endl;
+        cout << f->id << " | " << (f->geom ? _geos->as_string(f->geom) : "") << endl;
+        fs <<  f->id << "|" << (f->geom ? _geos->as_string(f->geom) : "") << endl;
     }
 
     fs.close();
@@ -1476,31 +1518,47 @@ void Topology::output_relations() const
 {
     std::fstream fs("cmatopo_relation_output.txt", std::ios::out);
 
-    cout << "relation count: " << _relations.size() << endl;
+    int count = 0;
+    for (const vector<relation*>* relations : _relations) {
+        if (!relations) continue;
+        count += relations->size();
+    }
+
+    cout << "relation count: " << count << endl;
     cout << "topogeo_id | layer_id | element_id | element_type" << endl;
-    for (const relation* r : _relations) {
-        if (!r) continue;
-        cout << r->topogeo_id << " | " << r->layer_id << " | "
-             << r->element_id << " | " << r->element_type
-             << endl;
-        fs << r->topogeo_id << " | " << r->layer_id << " | "
-           << r->element_id << " | " << r->element_type
-           << endl;
+    for (const vector<relation*>* relations : _relations) {
+        if (!relations) continue;
+
+        vector<relation*> sortedRelations(*relations);
+        sort(
+            sortedRelations.begin(),
+            sortedRelations.end(),
+            [](const relation* lhs, const relation* rhs) {
+                return (lhs->topogeo_id < rhs->topogeo_id ||
+                        (lhs->topogeo_id == rhs->topogeo_id && lhs->element_id < rhs->element_id) ||
+                        (lhs->topogeo_id == rhs->topogeo_id && lhs->element_id == rhs->element_id && lhs->element_type < rhs->element_type)
+                );
+            }
+        );
+
+        for (const relation* r : sortedRelations) {
+            if (!r) continue;
+            cout << r->topogeo_id << " | " << r->layer_id << " | "
+                 << r->element_id << " | " << r->element_type
+                 << endl;
+            fs << r->topogeo_id << " | " << r->layer_id << " | "
+               << r->element_id << " | " << r->element_type
+               << endl;
+        }
     }
 
     fs.close();
 }
 
-void Topology::add_edge(edge* e)
+void Topology::_update_indexes(const edge* e)
 {
     assert (e);
-    assert (e->id == _edges.size() || e->id == _edges.size()-1);
-    assert (e->geom);
-    assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
-    assert (_edges.size() < 100000);
-
-    e->abs_next_left_edge = abs(e->next_left_edge);
-    e->abs_next_right_edge = abs(e->next_right_edge);
+    assert (_edges.size() < MAX_INDEX_ELEM);
 
     bg::model::linestring<point> edgeLS;
 
@@ -1527,14 +1585,6 @@ void Topology::add_edge(edge* e)
     bg::set<0>(pt2, bg::get<0>(pt2)+DEFAULT_TOLERANCE);
     bg::set<1>(pt2, bg::get<1>(pt2)+DEFAULT_TOLERANCE);
 
-    if (e->id == _edges.size()) {
-        _edges.push_back(e);
-    }
-    else {
-        assert (_edges[e->id] == nullptr);
-        _edges[e->id] = e;
-    }
-
     _edge_idx->insert(make_pair(bounds, e->id));
     _edge_tol_idx->insert(make_pair(tolbounds, e->id));
 
@@ -1555,26 +1605,12 @@ void Topology::add_edge(edge* e)
         e->id
     ));
     (*_right_faces_idx)[e->right_face]->insert(e->id);
-
-    if ((*_face_geometries)[e->left_face]) {
-        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
-        (*_face_geometries)[e->left_face] = nullptr;
-    }
-
-    if ((*_face_geometries)[e->right_face]) {
-        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
-        (*_face_geometries)[e->right_face] = nullptr;
-    }
-
-    _inserted_edges->push_back(e->id);
 }
 
-void Topology::add_node(node* n)
+void Topology::_update_indexes(const node* n)
 {
     assert (n);
-    assert (n->geom);
-    assert (n->id == _nodes.size());
-    assert (GEOSGeomTypeId_r(hdl, n->geom) == GEOS_POINT);
+    assert (_nodes.size() < MAX_INDEX_ELEM);
 
     double x, y;
     GEOSGeomGetX_r(hdl, n->geom, &x);
@@ -1596,10 +1632,52 @@ void Topology::add_node(node* n)
     box tolbounds;
     bg::envelope(result, tolbounds);
 
-    _nodes.push_back(n);
     _node_idx->insert(make_pair(pt, n->id));
     _node_tol_idx->insert(make_pair(tolbounds, n->id));
+}
 
+void Topology::add_edge(edge* e)
+{
+    assert (e);
+    assert (e->id == _edges.size() || e->id == _edges.size()-1);
+    assert (e->geom);
+    assert (GEOSGeomTypeId_r(hdl, e->geom) == GEOS_LINESTRING);
+
+    e->abs_next_left_edge = abs(e->next_left_edge);
+    e->abs_next_right_edge = abs(e->next_right_edge);
+
+    if (e->id == _edges.size()) {
+        _edges.push_back(e);
+    }
+    else {
+        assert (_edges[e->id] == nullptr);
+        _edges[e->id] = e;
+    }
+
+    _update_indexes(e);
+
+    if ((*_face_geometries)[e->left_face]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
+        (*_face_geometries)[e->left_face] = nullptr;
+    }
+
+    if ((*_face_geometries)[e->right_face]) {
+        GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
+        (*_face_geometries)[e->right_face] = nullptr;
+    }
+
+    _inserted_edges->push_back(e->id);
+}
+
+void Topology::add_node(node* n)
+{
+    assert (n);
+    assert (n->geom);
+    assert (n->id == _nodes.size());
+    assert (GEOSGeomTypeId_r(hdl, n->geom) == GEOS_POINT);
+
+    _nodes.push_back(n);
+    _update_indexes(n);
     _inserted_nodes->push_back(n->id);
 }
 
@@ -1620,6 +1698,24 @@ void Topology::add_face(face* f)
     _face_geometries->push_back(nullptr);
 
     _inserted_faces->push_back(f->id);
+}
+
+void Topology::add_relation(int topogeoId, relation* r)
+{
+    assert (r);
+    assert (r->topogeo_id == topogeoId);
+
+    if (topogeoId == _relations.size()) {
+        _relations.push_back(new vector<relation*>);
+    }
+    else if (topogeoId < _relations.size() && !_relations[topogeoId]) {
+        _relations[topogeoId] = new vector<relation*>;
+    }
+    assert (topogeoId < _relations.size());
+
+    _transactions->push_back(new AddRelationTransaction(*this, r));
+
+    _relations[topogeoId]->push_back(r);
 }
 
 void Topology::remove_edge(int edgeId)
@@ -1722,6 +1818,60 @@ void Topology::rollback()
     _inserted_faces->clear();
 }
 
+void Topology::rebuild_indexes()
+{
+    assert (_transactions->empty());
+
+    int faceCount = _faces.size();
+    for (int i = 0 ; i < faceCount; ++i) {
+        assert (_left_faces_idx->size() == _right_faces_idx->size());
+        assert (_right_faces_idx->size() == _face_geometries->size());
+        if (i >= _left_faces_idx->size()) {
+            _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+            _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
+            _face_geometries->push_back(nullptr);
+        }
+        else {
+            if ((*_left_faces_idx)[i]) {
+                (*_left_faces_idx)[i]->clear();
+            }
+            if ((*_right_faces_idx)[i]) {
+                (*_right_faces_idx)[i]->clear();
+            }
+        }
+    }
+    assert (_faces.size() == _left_faces_idx->size());
+
+    for (const edge* e : _edges) {
+        if (!e) continue;
+        _update_indexes(e);
+        if ((*_face_geometries)[e->left_face]) {
+            GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
+            (*_face_geometries)[e->left_face] = nullptr;
+        }
+        if ((*_face_geometries)[e->right_face]) {
+            GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->right_face]);
+            (*_face_geometries)[e->right_face] = nullptr;
+        }
+    }
+
+    for (const node* n : _nodes) {
+        if (!n) continue;
+        _update_indexes(n);
+    }
+
+    // invalidate face geometry cache
+    for (int i = 0; i < _face_geometries->size(); ++i) {
+        GEOSGeometry* faceGeom = (*_face_geometries)[i];
+        if (faceGeom) {
+            GEOSGeom_destroy_r(hdl, faceGeom);
+            (*_face_geometries)[i] = nullptr;
+        }
+    }
+
+    commit();
+}
+
 void Topology::output_edges() const
 {
     std::fstream fs("cmatopo_edge_output.txt", std::ios::out);
@@ -1739,7 +1889,7 @@ void Topology::output_edges() const
              << e->abs_next_right_edge << " | "
              << e->left_face << " | "
              << e->right_face << " | "
-             << _geos.as_string(e->geom)
+             << _geos->as_string(e->geom)
              << endl;
         fs << e->id << "|"
              << e->start_node << "|"
@@ -1750,7 +1900,7 @@ void Topology::output_edges() const
              << e->abs_next_right_edge << "|"
              << e->left_face << "|"
              << e->right_face << "|"
-             << _geos.as_string(e->geom)
+             << _geos->as_string(e->geom)
              << endl;
     }
 
@@ -1903,6 +2053,40 @@ void Topology::_face_edges(int faceId, edgeid_set& edges)
         (*_right_faces_idx)[faceId]->end(),
         inserter(edges, edges.end())
     );
+}
+
+void Topology::_empty(bool free_items)
+{
+    assert (_transactions->empty());
+
+    if (free_items) {
+        delete_all(_nodes);
+        delete_all(_edges);
+        delete_all(_faces);
+
+        for (vector<relation*>* v : _relations) {
+            if (!v) continue;
+            delete_all(*v);
+            delete v;
+        }
+    }
+    else {
+        _nodes.clear();
+        _edges.clear();
+        _faces.clear();
+        _relations.clear();
+    }
+
+    _edge_idx->clear();
+    _edge_tol_idx->clear();
+
+    _node_idx->clear();
+    _node_tol_idx->clear();
+
+    _totalCount = 0;
+
+    _left_faces_idx->clear();
+    _right_faces_idx->clear();
 }
 
 void GEOM2BOOSTMLS(const GEOSGeometry* in, multi_linestring& mls)

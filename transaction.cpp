@@ -141,13 +141,11 @@ void RemoveFaceIndexTransaction::rollback()
     }
 }
 
-AddRelationTransaction::AddRelationTransaction(
-    Topology& topology,
-    int relationId
-)
+AddRelationTransaction::AddRelationTransaction(Topology& topology, relation* r)
 : TopologyTransaction(topology)
-, _relationId(relationId)
+, _relation(r)
 {
+    assert (_relation);
 }
 
 AddRelationTransaction::~AddRelationTransaction()
@@ -156,12 +154,23 @@ AddRelationTransaction::~AddRelationTransaction()
 
 void AddRelationTransaction::rollback()
 {
-    assert (_relationId < _topology._relations.size());
+    int topogeoId = _relation->topogeo_id;
 
-    relation* rel = _topology._relations[_relationId];
-    assert (rel && rel->id == _relationId);
-    _topology._relations[_relationId] = nullptr;
-    delete rel;
+    assert (topogeoId < _topology._relations.size());
+    assert (_topology._relations[topogeoId]);
+
+    vector<relation*>* relations = _topology._relations[topogeoId];
+
+    auto it = find(relations->begin(), relations->end(), _relation);
+    assert (it != relations->end());
+
+    delete *it;
+    relations->erase(it);
+
+    if (relations->empty()) {
+        delete relations;
+        _topology._relations[topogeoId] = nullptr;
+    }
 }
 
 } // namespace cma
