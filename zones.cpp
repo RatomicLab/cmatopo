@@ -1,17 +1,19 @@
 #include <zones.h>
 
-#include <omp.h>
-#include <assert.h>
-
 #include <string>
 #include <vector>
 #include <sstream>
+#include <cassert>
+#include <fstream>
 #include <iostream>
 
 #include <boost/filesystem/path.hpp>
+#include <boost/serialization/vector.hpp>
 #include <boost/filesystem/operations.hpp>
 
+#include <types.h>
 #include <utils.h>
+#include <topology.h>
 
 using namespace std;
 
@@ -27,7 +29,8 @@ namespace cma {
 const int rows = 2;
 const int cols = 2;
 
-void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, double* minY, double* maxY)
+void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX,
+    double* minY, double* maxY)
 {
     assert (extent && GEOSGeomTypeId_r(hdl, extent) == GEOS_POLYGON);
 
@@ -36,7 +39,8 @@ void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, doub
         GEOSGetExteriorRing_r(hdl, extent)
     );
 
-    int numPoints = GEOSGeomGetNumPoints_r(hdl, GEOSGetExteriorRing_r(hdl, extent));
+    int numPoints =
+        GEOSGeomGetNumPoints_r(hdl, GEOSGetExteriorRing_r(hdl, extent));
     assert (numPoints == 5);
 
     vector<double> Xs;
@@ -58,150 +62,118 @@ void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX, doub
     *maxY = *(minmaxY.second);
 }
 
-// void prepare_zones(const linesV& lines, const OGREnvelope& extent, vector<zoneInfo*>& zones, int maxdepth)
-void prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent, vector<zoneInfo*>& zones, int maxdepth)
+int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent,
+    vector<zone*>& zones, vector<depth_group_t>& grouping, int maxdepth,
+    int* nextZoneId)
 {
     assert (extent);
     assert (maxdepth >= 1);
-    assert (!omp_in_parallel());
+
+    bool del_seq = false;
+    if (nextZoneId == nullptr) {
+        nextZoneId = new int;
+        *nextZoneId = 0;
+        del_seq = true;
+    }
 
     double minX, maxX, minY, maxY;
     _minmax_extent(extent, &minX, &maxX, &minY, &maxY);
 
     size_t size;
-    unsigned char* hex_extent = GEOSWKBWriter_writeHEX_r(hdl, geos.writer(), extent, &size);
+    unsigned char* hex_extent =
+        GEOSWKBWriter_writeHEX_r(hdl, geos.writer(), extent, &size);
 
-    omp_set_num_threads(rows*cols);
-    int nThreads = get_nb_threads();
     double width  = fabs(maxX - minX);
     double height = fabs(maxY - minY);
 
-#if 0
-    cout <<
-        "MinX: " << minX << " "
-        "MaxX: " << maxX << " "
-        "MinY: " << minY << " "
-        "MaxY: " << maxY <<
-        endl;
-#endif
-
-    assert (rows*cols == nThreads);
     double local_width  = fabs(width / cols);
     double local_height = fabs(height / rows);
 
     double sum_nb_lines = 0.;
 
-    #pragma omp parallel reduction(+:sum_nb_lines)
-    {
-        PG db("postgresql://postgres@localhost/postgis");
+    PG db("postgresql://laurent@localhost/cmatopo");
 
-        int row = int(floor(omp_get_thread_num() / cols));
-        int col = omp_get_thread_num() % cols;
-
+    for (int row = 0; row < 2; ++row) {
+        for (int col = 0; col < 2; ++col) {
         OGREnvelope local_extent;
         local_extent.MinX = minX + col * local_width;
         local_extent.MaxX = local_extent.MinX + local_width;
         local_extent.MinY = minY + row * local_height;
         local_extent.MaxY = local_extent.MinY + local_height;
 
-        /*
-        ostringstream local_wkt_extent;
-        local_wkt_extent << "LINESTRING (";
-        local_wkt_extent << local_extent.MinX << " " << local_extent.MinY << ", ";  // lower left
-        local_wkt_extent << local_extent.MaxX << " " << local_extent.MinY << ", ";  // lower right
-        local_wkt_extent << local_extent.MaxX << " " << local_extent.MaxY << ", ";  // upper right
-        local_wkt_extent << local_extent.MinX << " " << local_extent.MaxY << ", ";  // upper left
-        local_wkt_extent << local_extent.MinX << " " << local_extent.MinY;         // lower left (again)
-        local_wkt_extent << ")";
-        */
-        GEOSGeometry* geom_extent = OGREnvelope2GEOSGeom(local_extent);
-        string local_wkt_extent = geos.as_string(geom_extent);
-        GEOSGeom_destroy_r(geos.handle(), geom_extent);
-
-#if 0
-        #pragma omp critical
-        {
-            cout << "Thread " << omp_get_thread_num() << " " <<
-                "MinX: " << local_extent.MinX << " "
-                "MaxX: " << local_extent.MaxX << " "
-                "MinY: " << local_extent.MinY << " "
-                "MaxY: " << local_extent.MaxY <<
-                endl;
-            cout << "local_width: " << local_width << ", local_height: " << local_height << endl;
-            cout << "Thread " << omp_get_thread_num() << " -- row: " << row << ", col: " << col << endl;
-            cout << "Thread " << omp_get_thread_num() << " " << local_wkt_extent.str() << endl << endl;
-        }
-#endif
-
-        zoneInfo* zone = new zoneInfo(local_extent, 0);
-
-        // int count = 0;
-        // OGREnvelope envelope;
-        // for (int l1idx = 0; l1idx < lines.size(); ++l1idx) {
-        //     lines[l1idx]->getEnvelope(&envelope);
-        //     if (local_extent.Contains(envelope)) {
-        //         ++count;
-        //         zone->second.push_back(lines[l1idx]);
-        //     }
-        // }
+        int nextId;
+        nextId = (*nextZoneId)++;
+        zone* z = new zone(nextId, local_extent);
 
         /**
          * This will select a line count of lines within our zone.
          */
+        GEOSGeometry* geom_extent = OGREnvelope2GEOSGeom(local_extent);
+        string pg_geom = db.build_pg_geom(geom_extent);
+        GEOSGeom_destroy_r(geos.handle(), geom_extent);
+
         ostringstream oss;
         oss << "SELECT COUNT(1) FROM way WHERE "
-            << "ST_SetSRID(ST_GeomFromText('" << local_wkt_extent << "'), 3395) ~ line2d_m";
+            << pg_geom << " && line2d_m AND "
+            << "ST_Contains(" << pg_geom << ", line2d_m)";
 
         int nlines = 0;
 
         PGresult* res = db.query(oss.str().c_str());
-        zone->second = atoi(PQgetvalue(res, 0, 0));
-
-        if (zone->second > 0) {
-            //cout << omp_get_thread_num() << ": " << oss.str() << endl;
-            //cout << omp_get_thread_num() << ": got " << zone->second << " lines." << endl;
-        }
-
+        z->count(atoi(PQgetvalue(res, 0, 0)));
         PQclear(res);
 
-        sum_nb_lines += zone->second;
+        sum_nb_lines += z->count();
 
-        #pragma omp critical
-        zones.push_back(zone);
-    }
+        zones.push_back(z);
+    }}
 
     GEOSFree_r(hdl, hex_extent);
 
+    assert (zones.size() == 4);
+    depth_group_t g = {
+        maxdepth,
+        {{ zones[0]->id(), zones[1]->id(), zones[2]->id(), zones[3]->id() }}
+    };
+
     if (maxdepth == 1) {
-        return;
+        grouping.push_back(g);
+        return sum_nb_lines;
     }
 
-    vector<int>                 to_del;
-    vector< vector<zoneInfo*> > to_add;
-
+    int gIdx = 0;
     for (int zIdx = 0; zIdx < zones.size(); ++zIdx) {
-        zoneInfo* zone = zones[zIdx];
-        if (zone->second > 15000) {
-            vector<zoneInfo*> subzones;
-            GEOSGeometry* g = OGREnvelope2GEOSGeom(zone->first);
-            prepare_zones(geos, g, subzones, maxdepth-1);
-            GEOSGeom_destroy_r(hdl, g);
+        zone* z = zones[zIdx];
+        if (z->count() > 15000) {
+            vector<zone*> subzones;
+            sum_nb_lines -= z->count();
+            sum_nb_lines += prepare_zones(geos, z->geom(), subzones, grouping, maxdepth-1, nextZoneId);
 
-            to_del.insert(to_del.begin(), zIdx);
-            to_add.push_back(subzones);
+            auto oldIt = find(begin(zones), end(zones), z);
+            auto newIt = zones.erase(oldIt);
+
+            assert (g.second[gIdx] == z->id());
+            g.second[gIdx] = subzones[0]->id();
+
+            zones.insert(newIt, subzones.begin(), subzones.end());
+
+            delete z;
+
+            zIdx += subzones.size()-1;
         }
+        ++gIdx;
     }
 
-    for (int idx : to_del) {
-        delete zones[idx];
-        zones.erase(zones.begin() + idx);
+    grouping.push_back(g);
+
+    if (del_seq) {
+        delete nextZoneId;
     }
-    for (auto subzones : to_add) {
-        zones.insert(zones.end(), subzones.begin(), subzones.end());
-    }
+
+    return sum_nb_lines;
 }
 
-void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bool overwrite)
+void write_zones(const std::string& filename, const vector<zone*>& zones, bool overwrite)
 {
     fs::path file_path(filename);
     if (overwrite && fs::exists(file_path)) {
@@ -217,32 +189,23 @@ void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bo
     OGRLayer* z_layer = zonesDS->CreateLayer("zones", &oSRS, wkbPolygon, NULL);
     assert (z_layer != NULL);
 
-    OGRFieldDefn oField("color", OFTInteger);
+    OGRFieldDefn oField("zoneId", OFTInteger);
     assert (z_layer->CreateField(&oField) == OGRERR_NONE);
 
-    cout <<
-        "MinX: " << zones[0]->first.MinX << " "
-        "MaxX: " << zones[0]->first.MaxX << " "
-        "MinY: " << zones[0]->first.MinY << " "
-        "MaxY: " << zones[0]->first.MaxY <<
-        endl;
-
-    //return 0;
-
     for (int zIdx = 0; zIdx < zones.size(); ++zIdx) {
-        OGREnvelope& env = zones[zIdx]->first;
+        OGREnvelope env = zones[zIdx]->envelope();
 
         OGRFeature* poFeature = OGRFeature::CreateFeature(z_layer->GetLayerDefn());
-        poFeature->SetField("color", rand()%0xFFFF);
+        poFeature->SetField("zoneId", zones[zIdx]->id());
         OGRPolygon* poly = new OGRPolygon();
 
         // per the specs, points must be added counter-clockwise
         OGRLinearRing* ring = new OGRLinearRing();
-        ring->addPoint(zones[zIdx]->first.MinX, zones[zIdx]->first.MinY);
-        ring->addPoint(zones[zIdx]->first.MaxX, zones[zIdx]->first.MinY);
-        ring->addPoint(zones[zIdx]->first.MaxX, zones[zIdx]->first.MaxY);
-        ring->addPoint(zones[zIdx]->first.MinX, zones[zIdx]->first.MaxY);
-        ring->addPoint(zones[zIdx]->first.MinX, zones[zIdx]->first.MinY);    // this closes the ring
+        ring->addPoint(zones[zIdx]->envelope().MinX, zones[zIdx]->envelope().MinY);
+        ring->addPoint(zones[zIdx]->envelope().MaxX, zones[zIdx]->envelope().MinY);
+        ring->addPoint(zones[zIdx]->envelope().MaxX, zones[zIdx]->envelope().MaxY);
+        ring->addPoint(zones[zIdx]->envelope().MinX, zones[zIdx]->envelope().MaxY);
+        ring->addPoint(zones[zIdx]->envelope().MinX, zones[zIdx]->envelope().MinY);    // this closes the ring
 
         poly->addRingDirectly(ring);
 
@@ -257,56 +220,46 @@ void write_zones(const std::string& filename, const vector<zoneInfo*>& zones, bo
     GDALClose(zonesDS);
 }
 
+void register_zones(
+    vector< vector<zone*> >& new_zones,
+    vector<zone*>& all_zones,
+    vector<zone*>& ordered_zones)
+{
+    for (int i = 0; i < new_zones.size(); ++i) {
+        for (zone* z : new_zones[i]) {
+            // insert the new zone at the original location
+            // in the ordered zones
+            ordered_zones.insert(
+                find_if(
+                    begin(ordered_zones),
+                    end(ordered_zones),
+                    [z](const zone* a) {
+                        return z->id() == a->id();
+                    }
+                ),
+                z
+            );
+        }
+        all_zones.insert(
+            end(all_zones),
+            new_zones[i].begin(),
+            new_zones[i].end()
+        );
+    }
+    new_zones.clear();
+}
+
 GEOSGeometry* world_geom()
 {
     OGREnvelope env;
 
-    #if 0
-    env.MinX = -180.;
-    env.MaxX = 180.;
-    env.MinY = -90.;
-    env.MaxY = 90.;
-    #endif // 0
-
+    // see projected bounds from http://epsg.io/3395
     env.MinX = -20026376.39;
     env.MaxX = 20026376.39;
     env.MinY = -15496570.74;
     env.MaxY = 18764656.23;
 
     return OGREnvelope2GEOSGeom(env);
-
-    // GEOSCoordSequence* corners = GEOSCoordSeq_create_r(hdl, 5, 2);
-    // assert (corners != NULL);
-    //
-    // GEOSCoordSeq_setX_r(hdl, corners, 0, -180.);
-    // GEOSCoordSeq_setY_r(hdl, corners, 0, 90.);
-    //
-    // GEOSCoordSeq_setX_r(hdl, corners, 1, -180.);
-    // GEOSCoordSeq_setY_r(hdl, corners, 1, -90.);
-    //
-    // GEOSCoordSeq_setX_r(hdl, corners, 2, 180.);
-    // GEOSCoordSeq_setY_r(hdl, corners, 2, -90.);
-    //
-    // GEOSCoordSeq_setX_r(hdl, corners, 3, 180.);
-    // GEOSCoordSeq_setY_r(hdl, corners, 3, 90.);
-    //
-    // GEOSCoordSeq_setX_r(hdl, corners, 4, -180.);
-    // GEOSCoordSeq_setY_r(hdl, corners, 4, 90.);
-    //
-    // GEOSGeometry* shell = GEOSGeom_createLinearRing_r(hdl, corners);
-    // assert (shell != NULL);
-    //
-    // GEOSGeometry* world_polygon = GEOSGeom_createPolygon_r(
-    //     hdl,
-    //     shell,
-    //     NULL,
-    //     0
-    // );
-    //
-    // assert (world_polygon != NULL);
-    //
-    // GEOSSetSRID_r(hdl, world_polygon, 4326);
-    // return world_polygon;
 }
 
 GEOSGeometry* OGREnvelope2GEOSGeom(const OGREnvelope& env)
@@ -343,6 +296,63 @@ GEOSGeometry* OGREnvelope2GEOSGeom(const OGREnvelope& env)
 
     GEOSSetSRID_r(hdl, polygon, 3395);
     return polygon;
+}
+
+zone* get_zone_by_id(const vector<zone*>& zones, int zoneId)
+{
+    auto it = find_if(zones.begin(), zones.end(),
+        [zoneId](const zone* z) {
+            return z->id() == zoneId;
+        }
+    );
+
+    if (it == zones.end()) {
+        return nullptr;
+    }
+
+    return *it;
+}
+
+Topology* restore_topology(GEOSHelper* geos, zone* z)
+{
+    assert (z);
+    assert (geos);
+
+    ostringstream oss;
+    oss << "topology-" << geos->as_hex_string(z->geom()) << ".ser";
+
+    ifstream ifs(oss.str());
+    if (!ifs.is_open()) {
+        return nullptr;
+    }
+
+    cout << "restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
+
+    Topology* t = new Topology();
+    boost::archive::binary_iarchive ia(ifs);
+    ia >> *t;
+
+    ifs.close();
+
+    t->rebuild_indexes();
+    return t;
+}
+
+void save_topology(GEOSHelper* geos, zone* z, Topology* t)
+{
+    assert (t);
+    assert (z);
+    assert (geos);
+    assert (z->id() == t->zoneId());
+
+    ostringstream oss;
+    oss << "topology-" << geos->as_hex_string(z->geom()) << ".ser";
+
+    cout << "saving topology for zone #" << z->id() << " to " << oss.str() << endl;
+
+    ofstream ofs(oss.str());
+    boost::archive::binary_oarchive oa(ofs);
+    oa << *t;
 }
 
 } // namespace cma
