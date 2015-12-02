@@ -117,14 +117,6 @@ int main(int argc, char **argv)
             (*processZones)[minProcess].push_back(z);
         }
 
-        /*
-        for (int i = 0; i < zonesPerProcess->size(); ++i) {
-            cout << "[0] Process " << i << " will process " << sqrt((*zonesPerProcess)[i])
-                 << " lines." << endl;
-            processingLineCount += sqrt((*zonesPerProcess)[i]);
-        }
-        */
-
         cout << "Will process " << processingLineCount << ", leaving " << line_count-processingLineCount
              << " orphans (" << (line_count-processingLineCount)/float(processingLineCount)*100 << "%)" << endl;
     }
@@ -150,7 +142,7 @@ int main(int argc, char **argv)
             GEOSWKTReader_read_r(hdl, geos->text_reader(), hexWKT.c_str());
 
         linesV lines;
-        if (!db.get_lines(zoneGeom, lines, true)) { // 1000
+        if (!db.get_lines(zoneGeom, lines, true)) {
             assert (false);
         }
 
@@ -168,7 +160,22 @@ int main(int argc, char **argv)
             continue;
         }
 
-        Topology* topology = new Topology(geos.get());
+        Topology* topology = restore_topology(geos.get(), z);
+
+        if (topology) {
+            if (topology->count() != lines.size()) {
+                cerr << "restored topology for zone #" << topology->zoneId() << " contains "
+                     << topology->count() << " roads but should contain " << lines.size()
+                     << " according to the database." << endl;
+                exit(1);
+            }
+            cout << "[" << world.rank() << "] topology for zone #" << zoneId
+                 << " has been restored from a checkpoint." << endl;
+            myTopologies.push_back(topology);
+            continue;
+        }
+
+        topology = new Topology(geos.get());
         topology->zoneId(z->id());
 
         int lc = 0;
@@ -199,6 +206,8 @@ int main(int argc, char **argv)
              << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
 
         myTopologies.push_back(topology);
+
+        save_topology(geos.get(), z, topology);
     }
 
     broadcast(world, zones, 0);
@@ -208,7 +217,7 @@ int main(int argc, char **argv)
 
     if (world.rank() == 0) {
         cout << "processed " << allplines << " lines in first pass." << endl;
-        //assert (allplines == processingLineCount);
+        assert (allplines == processingLineCount);
     }
 
     vector<Topology*> topologiesToMerge;
@@ -231,9 +240,6 @@ int main(int argc, char **argv)
 
         vector<depth_group_t> next_groups;
         if (world.rank() == 0) {
-            if (groups.size() == 0) {
-                cout << zones.size() << endl;
-            }
             assert (groups.size() > 0);
             assert (orderedZones.size() == zones.size());
 
@@ -329,11 +335,9 @@ int main(int argc, char **argv)
     // TODO: get topology to rank 0
     // it's in myTopologies on a random rank
 
-    /*
     std::ofstream ofs("topology.ser");
     boost::archive::binary_oarchive oa(ofs);
-    oa << mainTopology;
-    */
+    oa << myTopologies[0];
 
     for (const zone* z : zones) {
         delete z;

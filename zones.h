@@ -12,6 +12,8 @@
 
 namespace cma {
 
+class Topology;
+
 /**
  * This is to store the spliting operation so it can be merged
  * back in the correct order.
@@ -40,6 +42,9 @@ void register_zones(
     std::vector<zone*>& ordered_zones);
 
 zone* get_zone_by_id(const std::vector<zone*>& zones, int zoneId);
+
+Topology* restore_topology(GEOSHelper* geos, zone* z);
+void save_topology(GEOSHelper* geos, zone* z, Topology* t);
 
 /**
  * Return a geometry (polygon) which represents the entire world.

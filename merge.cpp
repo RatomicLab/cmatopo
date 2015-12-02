@@ -59,7 +59,7 @@ void merge_topologies(Topology& t1, Topology& t2)
     }
 
     for (face* f : t2._faces) {
-        if (f->id == 0) continue;
+        if (f && f->id == 0) continue;
 
         if (f) {
             (*face_map)[f->id] = nextFaceId;
@@ -259,7 +259,6 @@ int _internal_merge(
 
     merge_topologies(*t1, *t2);
     t1->rebuild_indexes();
-    t1->commit();
 
     zone* z1 = get_zone_by_id(zones, t1->zoneId());
     zone* z2 = get_zone_by_id(zones, t2->zoneId());

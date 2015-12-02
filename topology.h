@@ -126,6 +126,13 @@ public:
         _zoneId = zoneId;
     }
 
+    /**
+     * The total number of lines added (or not) to this topology.
+     */
+    uint64_t count() const {
+        return _totalCount;
+    }
+
 private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;

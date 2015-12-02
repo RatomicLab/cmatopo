@@ -604,10 +604,16 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     }
 
     if (oLeftFace != 0) {
-        for (vector<relation*>* relations : _relations) {
+        for (int topogeoId = 1; topogeoId < _relations.size(); ++topogeoId)
+        {
+            vector<relation*>* relations = _relations[topogeoId];
             if (!relations) continue;
-            for (relation* rel : *relations) {
-                if (rel->element_id == oLeftFace && rel->element_id == 3) {
+
+            int relcount = relations->size();
+            for (int i = 0; i < relcount; ++i) {
+                relation* rel = (*relations)[i];
+                if (rel->element_id == oLeftFace && rel->element_id == 3)
+                {
                     relation* nrel = new relation();
                     nrel->topogeo_id = rel->topogeo_id;
                     nrel->layer_id = rel->layer_id;
@@ -1195,15 +1201,22 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
         }
     }
 
-    for (vector<relation*>* relations : _relations) {
+    for (int topogeoId = 1; topogeoId < _relations.size(); ++topogeoId)
+    {
+        vector<relation*>* relations = _relations[topogeoId];
         if (!relations) continue;
-        for (relation* r : *relations) {
-            if (abs(r->element_id) == edgeId && r->element_type == 2) {
+
+        int relcount = relations->size();
+        for (int i = 0; i < relcount; ++i)
+        {
+            relation* rel = (*relations)[i];
+            if (abs(rel->element_id) == edgeId && rel->element_type == 2)
+            {
                 relation* nrel = new relation;
-                nrel->topogeo_id = r->topogeo_id;
-                nrel->layer_id = r->layer_id;
-                nrel->element_id = r->element_id < 0 ? -newEdge->id : newEdge->id;
-                nrel->element_type = r->element_type;
+                nrel->topogeo_id = rel->topogeo_id;
+                nrel->layer_id = rel->layer_id;
+                nrel->element_id = rel->element_id < 0 ? -newEdge->id : newEdge->id;
+                nrel->element_type = rel->element_type;
 
                 add_relation(nrel->topogeo_id, nrel);
             }
@@ -1695,7 +1708,7 @@ void Topology::add_relation(int topogeoId, relation* r)
     if (topogeoId == _relations.size()) {
         _relations.push_back(new vector<relation*>);
     }
-    else if (!_relations[topogeoId]) {
+    else if (topogeoId < _relations.size() && !_relations[topogeoId]) {
         _relations[topogeoId] = new vector<relation*>;
     }
     assert (topogeoId < _relations.size());

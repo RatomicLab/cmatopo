@@ -4,13 +4,16 @@
 #include <vector>
 #include <sstream>
 #include <cassert>
+#include <fstream>
 #include <iostream>
 
 #include <boost/filesystem/path.hpp>
+#include <boost/serialization/vector.hpp>
 #include <boost/filesystem/operations.hpp>
 
 #include <types.h>
 #include <utils.h>
+#include <topology.h>
 
 using namespace std;
 
@@ -308,6 +311,48 @@ zone* get_zone_by_id(const vector<zone*>& zones, int zoneId)
     }
 
     return *it;
+}
+
+Topology* restore_topology(GEOSHelper* geos, zone* z)
+{
+    assert (z);
+    assert (geos);
+
+    ostringstream oss;
+    oss << "topology-" << geos->as_hex_string(z->geom()) << ".ser";
+
+    ifstream ifs(oss.str());
+    if (!ifs.is_open()) {
+        return nullptr;
+    }
+
+    cout << "restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
+
+    Topology* t = new Topology();
+    boost::archive::binary_iarchive ia(ifs);
+    ia >> *t;
+
+    ifs.close();
+
+    t->rebuild_indexes();
+    return t;
+}
+
+void save_topology(GEOSHelper* geos, zone* z, Topology* t)
+{
+    assert (t);
+    assert (z);
+    assert (geos);
+    assert (z->id() == t->zoneId());
+
+    ostringstream oss;
+    oss << "topology-" << geos->as_hex_string(z->geom()) << ".ser";
+
+    cout << "saving topology for zone #" << z->id() << " to " << oss.str() << endl;
+
+    ofstream ofs(oss.str());
+    boost::archive::binary_oarchive oa(ofs);
+    oa << *t;
 }
 
 } // namespace cma
