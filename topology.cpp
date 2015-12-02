@@ -1555,6 +1555,54 @@ void Topology::output_relations() const
     fs.close();
 }
 
+void Topology::pg_output() const
+{
+    std::ofstream ofs;
+
+    ofs.open("node.csv");
+    assert (ofs.is_open());
+    for (const node* n : _nodes) {
+        if (!n) continue;
+        ofs << "\"" << n->id << "\",\"" << (_is_null(n->containing_face) ? "" : to_string(n->containing_face))
+            << "\",\"ST_SetSRID(ST_GeomFromText('" << _geos->as_string(n->geom) << "'), 3395)\"" << endl;
+    }
+    ofs.close();
+
+    ofs.open("edge_data.csv");
+    assert (ofs.is_open());
+    for (const edge* e : _edges) {
+        if (!e) continue;
+        ofs << e->id << "\",\"" << e->start_node << "\",\"" << e->end_node << "\",\"" << e->next_left_edge << "\",\""
+            << e->abs_next_left_edge << "\",\"" << e->next_right_edge << "\",\"" << e->abs_next_right_edge << "\",\""
+            << e->left_face << "\",\"" << e->right_face << "\",\""
+            << "ST_SetSRID(ST_GeomFromText('" << _geos->as_string(e->geom) << "'), 3395)\"" << endl;
+    }
+    ofs.close();
+
+    ofs.open("face.csv");
+    assert (ofs.is_open());
+    for (const face* f : _faces) {
+        if (!f) continue;
+        ofs <<  f->id << "\",\""
+            << "ST_SetSRID(ST_GeomFromText('" << (f->geom ? _geos->as_string(f->geom) : "") << "'), 3395)\""
+            << endl;
+    }
+    ofs.close();
+
+    ofs.open("relation.csv");
+    assert (ofs.is_open());
+    for (const vector<relation*>* relations : _relations) {
+        if (!relations) continue;
+        for (const relation* r : *relations) {
+            if (!r) continue;
+            ofs << r->topogeo_id << "\",\"" << r->layer_id << "\",\""
+                << r->element_id << "\",\"" << r->element_type << "\""
+                << endl;
+        }
+    }
+    ofs.close();
+}
+
 void Topology::_update_indexes(const edge* e)
 {
     assert (e);

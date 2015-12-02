@@ -118,6 +118,8 @@ public:
     void output_faces() const;
     void output_relations() const;
 
+    void pg_output() const;
+
     const node* closest_and_within_node(const GEOSGeometry* geom, double tolerance);
     const edge* closest_and_within_edge(const GEOSGeometry* geom, double tolerance);
 
@@ -345,6 +347,7 @@ void Topology::serialize(Archive & ar, const unsigned int version)
     ar & _faces;
     ar & _relations;
     ar & _zoneId;
+    ar & _totalCount;
 }
 
 } // namespace cma
