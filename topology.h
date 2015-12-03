@@ -216,7 +216,7 @@ private:
     void add_edge(edge* e);
     void add_node(node* n);
     void add_face(face* f);
-    void add_relation(int topogeoId, relation* r);
+    void add_relation(int topogeoId, relation* r, bool dupcheck = false);
     void add_relation(int topogeoId, std::vector<relation*>* relations);
 
     void remove_edge(int edgeId);

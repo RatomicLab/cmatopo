@@ -612,7 +612,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
             int relcount = relations->size();
             for (int i = 0; i < relcount; ++i) {
                 relation* rel = (*relations)[i];
-                if (rel->element_id == oLeftFace && rel->element_id == 3)
+                if (rel->element_id == oLeftFace && rel->element_type == 3)
                 {
                     relation* nrel = new relation();
                     nrel->topogeo_id = rel->topogeo_id;
@@ -1563,8 +1563,8 @@ void Topology::pg_output() const
     assert (ofs.is_open());
     for (const node* n : _nodes) {
         if (!n) continue;
-        ofs << "\"" << n->id << "\",\"" << (_is_null(n->containing_face) ? "" : to_string(n->containing_face))
-            << "\",\"ST_SetSRID(ST_GeomFromText('" << _geos->as_string(n->geom) << "'), 3395)\"" << endl;
+        ofs << n->id << "," << (_is_null(n->containing_face) ? "" : to_string(n->containing_face))
+            << ",SRID=3395;" << _geos->as_string(n->geom) << endl;
     }
     ofs.close();
 
@@ -1572,20 +1572,22 @@ void Topology::pg_output() const
     assert (ofs.is_open());
     for (const edge* e : _edges) {
         if (!e) continue;
-        ofs << e->id << "\",\"" << e->start_node << "\",\"" << e->end_node << "\",\"" << e->next_left_edge << "\",\""
-            << e->abs_next_left_edge << "\",\"" << e->next_right_edge << "\",\"" << e->abs_next_right_edge << "\",\""
-            << e->left_face << "\",\"" << e->right_face << "\",\""
-            << "ST_SetSRID(ST_GeomFromText('" << _geos->as_string(e->geom) << "'), 3395)\"" << endl;
+        ofs << e->id << "|" << e->start_node << "|" << e->end_node << "|" << e->next_left_edge << "|"
+            << e->abs_next_left_edge << "|" << e->next_right_edge << "|" << e->abs_next_right_edge << "|"
+            << e->left_face << "|" << e->right_face << "|"
+            << "SRID=3395;" << _geos->as_string(e->geom) << endl;
     }
     ofs.close();
 
     ofs.open("face.csv");
     assert (ofs.is_open());
     for (const face* f : _faces) {
-        if (!f) continue;
-        ofs <<  f->id << "\",\""
-            << "ST_SetSRID(ST_GeomFromText('" << (f->geom ? _geos->as_string(f->geom) : "") << "'), 3395)\""
-            << endl;
+        if (!f || f->id == 0) continue;
+        ofs << f->id << "|";
+        if (f->geom) {
+            ofs << "SRID=3395;" << _geos->as_string(f->geom);
+        }
+        ofs << endl;
     }
     ofs.close();
 
@@ -1593,10 +1595,11 @@ void Topology::pg_output() const
     assert (ofs.is_open());
     for (const vector<relation*>* relations : _relations) {
         if (!relations) continue;
-        for (const relation* r : *relations) {
+        for (int i = 0; i < relations->size(); ++i) {
+            relation* r = (*relations)[i];
             if (!r) continue;
-            ofs << r->topogeo_id << "\",\"" << r->layer_id << "\",\""
-                << r->element_id << "\",\"" << r->element_type << "\""
+            ofs << r->topogeo_id << "," << r->layer_id << ","
+                << r->element_id << "," << r->element_type << ""
                 << endl;
         }
     }
@@ -1748,7 +1751,7 @@ void Topology::add_face(face* f)
     _inserted_faces->push_back(f->id);
 }
 
-void Topology::add_relation(int topogeoId, relation* r)
+void Topology::add_relation(int topogeoId, relation* r, bool dupcheck)
 {
     assert (r);
     assert (r->topogeo_id == topogeoId);
@@ -1763,6 +1766,18 @@ void Topology::add_relation(int topogeoId, relation* r)
 
     _transactions->push_back(new AddRelationTransaction(*this, r));
 
+    if (dupcheck) {
+        auto it = find_if(
+            _relations[topogeoId]->begin(),
+            _relations[topogeoId]->end(),
+            [r](const relation* other) {
+                return *r == *other;
+            }
+        );
+        if (it != _relations[topogeoId]->end()) {
+            return;
+        }
+    }
     _relations[topogeoId]->push_back(r);
 }
 
