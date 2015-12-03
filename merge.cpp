@@ -146,6 +146,8 @@ int merge_topologies(
             Topology* t1 = topologies[i*4+j*2];
             Topology* t2 = topologies[i*4+j*2+1];
 
+            int z2_id = t2->zoneId();
+
             Topology* t1t = t1;
             orphan_count +=
                 _internal_merge(db, geos, zones, &t1, t2, temp_new_zones);
@@ -159,8 +161,8 @@ int merge_topologies(
             zones.erase(find_if(zones.begin(), zones.end(), [t1](const zone* z) {
                 return z->id() == t1->zoneId();
             }));
-            zones.erase(find_if(zones.begin(), zones.end(), [t2](const zone* z) {
-                return z->id() == t2->zoneId();
+            zones.erase(find_if(zones.begin(), zones.end(), [z2_id](const zone* z) {
+                return z->id() == z2_id;
             }));
         }
         assert (t[0] && t[1]);
@@ -169,13 +171,15 @@ int merge_topologies(
         // replace zones in the original vector with the new (temporary) ones
         zones.insert(zones.end(), temp_new_zones.begin(), temp_new_zones.end());
 
+        int z2_id = t[1]->zoneId();
+
         orphan_count += _internal_merge(db, geos, zones, &t[0], t[1], new_zones);
 
         zones.erase(find_if(zones.begin(), zones.end(), [t](const zone* z) {
             return z->id() == t[0]->zoneId();
         }));
-        zones.erase(find_if(zones.begin(), zones.end(), [t](const zone* z) {
-            return z->id() == t[1]->zoneId();
+        zones.erase(find_if(zones.begin(), zones.end(), [z2_id](const zone* z) {
+            return z->id() == z2_id;
         }));
         zones.push_back(new_zones[new_zones.size()-1]);
 
@@ -288,6 +292,7 @@ int _internal_merge(
     else {
         merge_topologies(**t1, *t2);
         (*t1)->rebuild_indexes();
+        delete t2;
     }
 
     linesV orphans;

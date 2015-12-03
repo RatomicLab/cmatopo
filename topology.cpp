@@ -235,6 +235,7 @@ void Topology::TopoGeo_AddLineString(int line_id, GEOSGeom line, double toleranc
     assert (noded);
 
     int topogeoId = _relations.size();
+    _relations.push_back(nullptr);
 
     // 3. For each (now-noded) segment, insert an edge
     vector<edge_value> results_s;
