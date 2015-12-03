@@ -252,6 +252,13 @@ private:
     }
 };
 
+inline bool operator==(const relation& lhs, const relation& rhs) {
+    return lhs.topogeo_id == rhs.topogeo_id &&
+            lhs.layer_id == rhs.layer_id &&
+            lhs.element_id == rhs.element_id &&
+            lhs.element_type == rhs.element_type;
+}
+
 template<class Archive>
 void zone::serialize(Archive & ar, const unsigned int version)
 {

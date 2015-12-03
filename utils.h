@@ -19,6 +19,7 @@ class GEOSHelper
 public:
     GEOSHelper() {
         hdl = initGEOS_r(geos_message_function, geos_message_function);
+        assert (hdl);
         if (hdl) {
             wkbr = GEOSWKBReader_create_r(hdl);
             wktr = GEOSWKTReader_create_r(hdl);
