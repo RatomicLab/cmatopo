@@ -1,15 +1,17 @@
 CXX := icpc
 
 program_NAME := cmatopo
-program_SRCS := $(wildcard *.cpp)
+program_SRCS := $(filter-out serdump.cpp main.cpp, $(wildcard *.cpp))
 program_OBJS := ${program_SRCS:.cpp=.o}
 
 program_INCLUDE_DIRS := .
-program_INCLUDE_DIRS += /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/include
+#program_INCLUDE_DIRS += /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/include
+program_INCLUDE_DIRS += /home/laurent/src/postgis-2.1.8/liblwgeom
 #program_INCLUDE_DIRS += /Users/laurent/software/elcapitan/postgis/2.1.8_intel15_dbg/include
 program_INCLUDE_DIRS += /usr/local/include
 
-program_LIBRARY_DIRS := /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/lib
+#program_LIBRARY_DIRS := /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/lib
+program_LIBRARY_DIRS := /home/laurent/src/postgis-2.1.8/liblwgeom
 #program_LIBRARY_DIRS := /Users/laurent/software/elcapitan/postgis/2.1.8_intel15_dbg/lib
 program_LIBRARY_DIRS += /usr/local/lib
 
@@ -27,13 +29,17 @@ LDFLAGS += $(foreach library,$(program_LIBRARIES),-l$(library))
 
 .PHONY: all clean distclean
 
-all: $(program_NAME)
+all: $(program_NAME) serdump
 
-$(program_NAME): $(program_OBJS)
-	$(LINK.cc) $(program_OBJS) -o $(program_NAME)
+$(program_NAME): main.cpp $(program_OBJS)
+	$(LINK.cc) $(program_OBJS) main.cpp -o $(program_NAME)
+
+serdump: serdump.cpp $(program_OBJS)
+	$(LINK.cc) $(program_OBJS) serdump.cpp -o serdump
 
 clean:
 	@- $(RM) $(program_NAME)
 	@- $(RM) $(program_OBJS)
+	@- $(RM) serdump
 
 distclean: clean
