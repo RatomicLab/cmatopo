@@ -48,7 +48,7 @@ int main(int argc, char** argv)
          << "\tCOPY way_topo.node FROM '/path/to/node.csv' WITH CSV;" << endl
          << "\tCOPY way_topo.face FROM '/path/to/face.csv' WITH CSV DELIMITER '|';" << endl
          << "\tCOPY way_topo.edge_data FROM '/path/to/edge_data.csv' WITH CSV DELIMITER '|';" << endl
-         << "\tCOPY way_topo.relation FROM '/path/to/relation.csv' WITH CSV;" << endl;
+         << "\tCOPY way_topo.relation FROM '/path/to/relation.csv' WITH CSV;" << endl
          << endl
          << "4. Insert the content of the GetTopoGeom.sql file into your database (if not already done)." << endl
          << endl

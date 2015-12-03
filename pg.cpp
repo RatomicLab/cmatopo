@@ -154,7 +154,7 @@ bool PG::get_common_lines(
     string m_str = build_pg_geom(g3);
 
     ostringstream oss;
-    oss << "SELECT line2d_m FROM way WHERE "
+    oss << "SELECT id, line2d_m FROM way WHERE "
         << m_str << " && line2d_m AND ST_Contains(" << m_str << ", line2d_m) AND "
         << env1_str << " && line2d_m AND NOT ST_Contains(" << env1_str << ", line2d_m) AND "
         << env2_str << " && line2d_m AND NOT ST_Contains(" << env2_str << ", line2d_m)";
