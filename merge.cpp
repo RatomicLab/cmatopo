@@ -94,6 +94,9 @@ void merge_topologies(Topology& t1, Topology& t2)
         ++nextTopogeoId;
     }
 
+    for (auto& p : *t2._topogeom_relations) {
+        p.second = (*relation_map)[p.second];
+    }
     t1._topogeom_relations->insert(
         t2._topogeom_relations->begin(), t2._topogeom_relations->end());
 
