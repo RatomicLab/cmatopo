@@ -136,6 +136,8 @@ void Topology::TopoGeo_AddLineString(int line_id, GEOSGeom line, double toleranc
 {
     assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
 
+    ++_totalCount;
+
     // cout << "Topology::TopoGeo_AddLineString(" << _geos->as_string(line) << ")" << endl;
 
     if (tolerance <= 0) {
@@ -308,8 +310,6 @@ void Topology::TopoGeo_AddLineString(int line_id, GEOSGeom line, double toleranc
 
     assert (_topogeom_relations->count(line_id) == 0);
     (*_topogeom_relations)[line_id] = topogeoId;
-
-    ++_totalCount;
 }
 
 /**
