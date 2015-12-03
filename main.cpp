@@ -296,7 +296,7 @@ int main(int argc, char **argv)
         // pair-wise merge
         vector<zone*> newZones;
         orphan_count +=
-            merge_topologies(db, zones, topologiesToMerge, newZones, myTopologies);
+            merge_topologies(db, geos.get(), zones, topologiesToMerge, newZones, myTopologies);
         assert (topologiesToMerge.empty());
 
         vector< vector<zone*> > vz;
@@ -335,9 +335,16 @@ int main(int argc, char **argv)
     // TODO: get topology to rank 0
     // it's in myTopologies on a random rank
 
-    std::ofstream ofs("topology.ser");
-    boost::archive::binary_oarchive oa(ofs);
-    oa << myTopologies[0];
+    assert (zones.size() == 1);
+    auto topoIt = find_if(myTopologies.begin(), myTopologies.end(), [zones](const Topology* t) {
+        return t->zoneId() == zones[0]->id();
+    });
+    if (topoIt != myTopologies.end()) {
+        // we are on the rank who owns the last topology
+        std::ofstream ofs("topology.ser");
+        boost::archive::binary_oarchive oa(ofs);
+        oa << **topoIt;
+    }
 
     for (const zone* z : zones) {
         delete z;
