@@ -49,6 +49,7 @@ Topology::Topology(GEOSHelper* geos)
 , _inserted_nodes(new vector<int>())
 , _inserted_edges(new vector<int>())
 , _inserted_faces(new vector<int>())
+, _topogeom_relations(new map<int, int>())
 , _tr_track_geom(new set<GEOSGeometry*>())
 , _geos(geos)
 , _edge_idx(new edge_idx_t)
@@ -113,6 +114,8 @@ Topology::~Topology()
     delete _inserted_edges;
     delete _inserted_faces;
 
+    delete _topogeom_relations;
+
     assert (_tr_track_geom->empty());
     delete _tr_track_geom;
 
@@ -129,7 +132,7 @@ Topology::~Topology()
     _relations.clear();
 }
 
-void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
+void Topology::TopoGeo_AddLineString(int line_id, GEOSGeom line, double tolerance)
 {
     assert (GEOSGeomTypeId_r(hdl, line) == GEOS_LINESTRING);
 
@@ -299,9 +302,12 @@ void Topology::TopoGeo_AddLineString(GEOSGeom line, double tolerance)
         r->element_id = newEdgeId;
         r->element_type = 2;     // LINESTRING
 
-        add_relation(topogeoId, r);
+        add_relation(topogeoId, r, true);
     }
     GEOSGeom_destroy_r(hdl, noded);
+
+    assert (_topogeom_relations->count(line_id) == 0);
+    (*_topogeom_relations)[line_id] = topogeoId;
 
     ++_totalCount;
 }
@@ -620,7 +626,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
                     nrel->element_id = newFaceId;
                     nrel->element_type = 3;
 
-                    add_relation(nrel->topogeo_id, nrel);
+                    add_relation(nrel->topogeo_id, nrel, true);
                 }
             }
         }
@@ -1218,7 +1224,7 @@ int Topology::ST_ModEdgeSplit(int edgeId, const GEOSGeom point)
                 nrel->element_id = rel->element_id < 0 ? -newEdge->id : newEdge->id;
                 nrel->element_type = rel->element_type;
 
-                add_relation(nrel->topogeo_id, nrel);
+                add_relation(nrel->topogeo_id, nrel, true);
             }
         }
     }
@@ -1602,6 +1608,15 @@ void Topology::pg_output() const
                 << r->element_id << "," << r->element_type << ""
                 << endl;
         }
+    }
+    ofs.close();
+
+    ofs.open("topo_geom.sql");
+    assert (ofs.is_open());
+    for (auto& p : *_topogeom_relations) {
+        ofs << "UPDATE way SET topo_geom=topology.GetTopoGeom('way_topo', "
+            << "2, 1, " << p.second << " WHERE id=" << p.first << ";"
+            << endl;
     }
     ofs.close();
 }
@@ -2145,6 +2160,8 @@ void Topology::_empty(bool free_items)
 
     _node_idx->clear();
     _node_tol_idx->clear();
+
+    _topogeom_relations->clear();
 
     _totalCount = 0;
 

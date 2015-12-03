@@ -94,6 +94,9 @@ void merge_topologies(Topology& t1, Topology& t2)
         ++nextTopogeoId;
     }
 
+    t1._topogeom_relations->insert(
+        t2._topogeom_relations->begin(), t2._topogeom_relations->end());
+
     for (int i = newEdgeId; i < t1._edges.size(); ++i) {
         edge* e = t1._edges[i];
         if (!e) continue;
@@ -296,9 +299,11 @@ int _internal_merge(
         return orphans.size();
     }
 
-    for (GEOSGeometry* line : orphans) {
+    for (pair<int, GEOSGeometry*>& orphan : orphans) {
+        int lineId = orphan.first;
+        GEOSGeometry* line = orphan.second;
         try {
-            (*t1)->TopoGeo_AddLineString(line, DEFAULT_TOLERANCE);
+            (*t1)->TopoGeo_AddLineString(lineId, line, DEFAULT_TOLERANCE);
             (*t1)->commit();
         }
         catch (const invalid_argument& ex) {

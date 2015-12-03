@@ -109,7 +109,7 @@ bool PG::get_lines(
     bool within,
     int limit)
 {
-    string q = _build_query(geom, within, limit, false);
+    string q = _build_query(geom, within, limit);
 
     PGresult* res = query(q.c_str());
 
@@ -118,13 +118,15 @@ bool PG::get_lines(
         return false;
     }
 
+    char* id;
     char* line2d;
     GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
     for (int i = 0; i < PQntuples(res); i++) {
-        line2d = PQgetvalue(res, i, 0);
-        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 0));
+        id = PQgetvalue(res, i, 0);
+        line2d = PQgetvalue(res, i, 1);
+        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 1));
         assert (line != NULL);
-        lines.push_back(line);
+        lines.push_back(make_pair(atoi(id), line));
     }
     GEOSWKBReader_destroy_r(hdl, wkb_reader);
 
@@ -164,13 +166,15 @@ bool PG::get_common_lines(
         return false;
     }
 
+    char* id;
     char* line2d;
     GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
     for (int i = 0; i < PQntuples(res); i++) {
-        line2d = PQgetvalue(res, i, 0);
-        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 0));
+        id = PQgetvalue(res, i, 0);
+        line2d = PQgetvalue(res, i, 1);
+        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 1));
         assert (line != NULL);
-        lines.push_back(line);
+        lines.push_back(make_pair(atoi(id), line));
     }
     GEOSWKBReader_destroy_r(hdl, wkb_reader);
 
@@ -185,7 +189,7 @@ bool PG::get_line_ids(
     bool within,
     int limit)
 {
-    string q = _build_query(envelope, within, limit, true);
+    string q = _build_query(envelope, within, limit);
 
     PGresult* res = query(q.c_str());
 
@@ -214,7 +218,7 @@ bool PG::get_lines(const std::set<int> lineIds, linesV& lines)
     });
 
     ostringstream oss;
-    oss << "SELECT line2d_m FROM way WHERE id IN (" << join(ids, ",") << ")";
+    oss << "SELECT id, line2d_m FROM way WHERE id IN (" << join(ids, ",") << ")";
 
     PGresult* res = query(oss.str().c_str());
 
@@ -223,13 +227,15 @@ bool PG::get_lines(const std::set<int> lineIds, linesV& lines)
         return false;
     }
 
+    char* id;
     char* line2d;
     GEOSWKBReader* wkb_reader = GEOSWKBReader_create_r(hdl);
     for (int i = 0; i < PQntuples(res); i++) {
-        line2d = PQgetvalue(res, i, 0);
-        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 0));
+        id = PQgetvalue(res, i, 0);
+        line2d = PQgetvalue(res, i, 1);
+        GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 1));
         assert (line != NULL);
-        lines.push_back(line);
+        lines.push_back(make_pair(atoi(id), line));
     }
     GEOSWKBReader_destroy_r(hdl, wkb_reader);
 
@@ -240,13 +246,12 @@ bool PG::get_lines(const std::set<int> lineIds, linesV& lines)
 string PG::_build_query(
     const GEOSGeometry* geom,
     bool within,
-    int limit,
-    bool id)
+    int limit)
 {
     string geom_str = build_pg_geom(geom);
 
     ostringstream oss;
-    oss << "SELECT " << (id ? "id" : "line2d_m") << " FROM way WHERE ";
+    oss << "SELECT id, line2d_m FROM way WHERE ";
     if (!within) oss << " NOT ";
     oss << " ST_Contains(" << geom_str << ", line2d_m) ";
     if (!within) oss << " AND ST_Intersects(" << geom_str << ", line2d_m) ";

@@ -54,8 +54,7 @@ private:
     std::string _build_query(
         const GEOSGeometry* geom,
         bool within,
-        int limit,
-        bool id);
+        int limit);
 
     PGconn* _conn = NULL;
 };

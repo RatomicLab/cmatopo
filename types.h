@@ -20,7 +20,7 @@
 
 namespace cma {
 
-typedef std::vector<GEOSGeometry *> linesV;
+typedef std::vector< std::pair<int, GEOSGeometry *> > linesV;
 
 class zone
 {

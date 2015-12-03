@@ -10,6 +10,7 @@
 
 #include <boost/tuple/tuple.hpp>
 
+#include <boost/serialization/map.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
@@ -81,7 +82,7 @@ public:
     /**
      * Add an edge (and it's endpoints) to the topology.
      */
-    void TopoGeo_AddLineString(GEOSGeom line, double tolerance=0.);
+    void TopoGeo_AddLineString(int line_id, GEOSGeom line, double tolerance=0.);
     int ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom);
 
     /*****************/
@@ -150,6 +151,12 @@ private:
     std::vector<int>* _inserted_nodes = nullptr;
     std::vector<int>* _inserted_edges = nullptr;
     std::vector<int>* _inserted_faces = nullptr;
+
+    /**
+     * Keep link from way.id to way_topo.relation.topogeo_id
+     * for PostgreSQL output.
+     */
+    std::map<int, int>* _topogeom_relations;
 
     /**
      * Temporary vector to track geometry deletion
@@ -348,6 +355,7 @@ void Topology::serialize(Archive & ar, const unsigned int version)
     ar & _relations;
     ar & _zoneId;
     ar & _totalCount;
+    ar & _topogeom_relations;
 }
 
 } // namespace cma

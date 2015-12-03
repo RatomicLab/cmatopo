@@ -179,9 +179,11 @@ int main(int argc, char **argv)
         topology->zoneId(z->id());
 
         int lc = 0;
-        for (GEOSGeometry* line : lines) {
+        for (pair<int, GEOSGeometry*>& line_info : lines) {
+            int lineId = line_info.first;
+            GEOSGeometry* line = line_info.second;
             try {
-                topology->TopoGeo_AddLineString(line, DEFAULT_TOLERANCE);
+                topology->TopoGeo_AddLineString(lineId, line, DEFAULT_TOLERANCE);
                 topology->commit();
             }
             catch (const invalid_argument& ex) {
