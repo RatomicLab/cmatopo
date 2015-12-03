@@ -1615,7 +1615,7 @@ void Topology::pg_output() const
     assert (ofs.is_open());
     for (auto& p : *_topogeom_relations) {
         ofs << "UPDATE way SET topo_geom=topology.GetTopoGeom('way_topo', "
-            << "2, 1, " << p.second << " WHERE id=" << p.first << ";"
+            << "2, 1, " << p.second << ") WHERE id=" << p.first << ";"
             << endl;
     }
     ofs.close();
