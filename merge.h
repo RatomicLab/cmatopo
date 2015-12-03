@@ -34,6 +34,7 @@ void merge_topologies(Topology& t1, Topology& t2);
  */
 int merge_topologies(
     PG& db,
+    GEOSHelper* geos,
     std::vector<zone*> zones,     // get a copy of the zones, this is not a mistake
     std::vector<Topology*>& topologies,
     std::vector<zone*>& new_zones,
@@ -62,8 +63,9 @@ direction_type position(const OGREnvelope& e1, const OGREnvelope& e2);
 
 int _internal_merge(
     PG& db,
+    GEOSHelper* geos,
     std::vector<zone*>& zones,
-    Topology* t1,
+    Topology** t1,
     Topology* t2,
     std::vector<zone*>& new_zones);
 

@@ -116,6 +116,7 @@ void merge_topologies(Topology& t1, Topology& t2)
 
 int merge_topologies(
     PG& db,
+    GEOSHelper* geos,
     vector<zone*> zones,
     vector<Topology*>& topologies,
     vector<zone*>& new_zones,
@@ -139,8 +140,13 @@ int merge_topologies(
             Topology* t1 = topologies[i*4+j*2];
             Topology* t2 = topologies[i*4+j*2+1];
 
+            Topology* t1t = t1;
             orphan_count +=
-                _internal_merge(db, zones, t1, t2, temp_new_zones);
+                _internal_merge(db, geos, zones, &t1, t2, temp_new_zones);
+            if (t1 != t1t) {
+                // a swap occured
+                topologies[i*4+j*2] = t1;
+            }
 
             t[j] = t1;
 
@@ -157,7 +163,7 @@ int merge_topologies(
         // replace zones in the original vector with the new (temporary) ones
         zones.insert(zones.end(), temp_new_zones.begin(), temp_new_zones.end());
 
-        orphan_count += _internal_merge(db, zones, t[0], t[1], new_zones);
+        orphan_count += _internal_merge(db, geos, zones, &t[0], t[1], new_zones);
 
         zones.erase(find_if(zones.begin(), zones.end(), [t](const zone* z) {
             return z->id() == t[0]->zoneId();
@@ -250,43 +256,61 @@ direction_type position(const OGREnvelope& e1, const OGREnvelope& e2)
 
 int _internal_merge(
     PG& db,
+    GEOSHelper* geos,
     vector<zone*>& zones,
-    Topology* t1,
+    Topology** t1,
     Topology* t2,
     vector<zone*>& new_zones)
 {
     communicator world;
 
-    merge_topologies(*t1, *t2);
-    t1->rebuild_indexes();
-
-    zone* z1 = get_zone_by_id(zones, t1->zoneId());
+    // prepare the merged zone right now to see if we have a checkpoint file
+    zone* z1 = get_zone_by_id(zones, (*t1)->zoneId());
     zone* z2 = get_zone_by_id(zones, t2->zoneId());
+
+    OGREnvelope envelope = z1->envelope();
+    envelope.Merge(z2->envelope());
+    zone* merged_zone = new zone((*t1)->zoneId(), envelope);
+
+    Topology* restored = restore_topology(geos, merged_zone);
+
+    if (restored) {
+        // swap the restored geometry with the current (unmerged) one
+        delete *t1;
+        *t1 = restored;
+    }
+    else {
+        merge_topologies(**t1, *t2);
+        (*t1)->rebuild_indexes();
+    }
 
     linesV orphans;
     db.get_common_lines(z1->envelope(), z2->envelope(), orphans);
     cout << "[" << world.rank() << "] adding " << orphans.size() << " lines to topology #"
-         << t1->zoneId() << " (lc: " << z1->count() << "+" << z2->count() << ")" << endl;
+         << (*t1)->zoneId() << " (lc: " << z1->count() << "+" << z2->count() << ")" << endl;
+
+    merged_zone->count(z1->count() + z2->count() + orphans.size());
+    new_zones.push_back(merged_zone);
+
+    if (restored) {
+        return orphans.size();
+    }
 
     for (GEOSGeometry* line : orphans) {
         try {
-            t1->TopoGeo_AddLineString(line, DEFAULT_TOLERANCE);
-            t1->commit();
+            (*t1)->TopoGeo_AddLineString(line, DEFAULT_TOLERANCE);
+            (*t1)->commit();
         }
         catch (const invalid_argument& ex) {
-            t1->rollback();
+            (*t1)->rollback();
         }
         GEOSGeom_destroy_r(hdl, line);
     }
 
-    OGREnvelope envelope = z1->envelope();
-    envelope.Merge(z2->envelope());
-    zone* merged_zone = new zone(t1->zoneId(), envelope);
-    merged_zone->count(z1->count() + z2->count() + orphans.size());
-    new_zones.push_back(merged_zone);
-
     cout << "[" << world.rank() << "] added new merged topology for"
-         << " zone #" << t1->zoneId() << " (lc: " << merged_zone->count() << ")" << endl;
+         << " zone #" << (*t1)->zoneId() << " (lc: " << merged_zone->count() << ")" << endl;
+
+    save_topology(geos, merged_zone, *t1);
 
     return orphans.size();
 }
