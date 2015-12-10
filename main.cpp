@@ -14,6 +14,8 @@
 #include <zones.h>
 #include <topology.h>
 
+#include <boost/program_options.hpp>
+
 #include <boost/mpi/collectives.hpp>
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
@@ -28,6 +30,8 @@ using namespace std;
 
 using namespace boost::mpi;
 using namespace boost::algorithm;
+
+namespace po = boost::program_options;
 
 namespace cma {
     GEOSContextHandle_t hdl;
@@ -48,16 +52,47 @@ int main(int argc, char **argv)
     environment env;
     communicator world;
 
+    int ret = -1;
+    string postgres_connect_str;
+    po::variables_map vm;
+    if (world.rank() == 0) {
+        po::options_description desc("Allowed options");
+        desc.add_options()
+            ("help", "Produce help message")
+            ("db", po::value<string>()->required(), "PostgreSQL connect string (required)")
+        ;
+
+        try {
+            po::store(po::parse_command_line(argc, argv, desc), vm);
+            po::notify(vm);
+
+            if (vm.count("help")) {
+                cout << desc << endl;
+                ret = 1;
+            }
+            else {
+                postgres_connect_str = vm["db"].as<string>();
+            }
+        } catch (const po::required_option&) {
+            cerr << desc << endl;
+            ret = 1;
+        }
+    }
+
+    broadcast(world, ret, 0);
+    if (ret > 0) {
+        return ret;
+    }
+
+    broadcast(world, postgres_connect_str, 0);
+
     initGEOS(geos_message_function, geos_message_function);
     OGRRegisterAll();
 
     unique_ptr<GEOSHelper> geos(new GEOSHelper());
     assert (hdl != NULL);
 
-    // vm with Quebec only: postgresql://postgres@192.168.56.101/postgis
-    // vm with the world: postgresql://pgsql@pg/cmdb
-    // PG db("postgresql://postgres@localhost/postgis");
-    PG db("postgresql://laurent@localhost/cmatopo");
+    PG db(postgres_connect_str);
     if (!db.connected()) {
         cerr << "Could not connect to PostgreSQL." << endl;
         return 1;

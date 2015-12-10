@@ -16,10 +16,10 @@ program_LIBRARY_DIRS := /home/laurent/src/postgis-2.1.8/liblwgeom
 program_LIBRARY_DIRS += /usr/local/lib
 
 
-program_LIBRARIES := mpfr boost_serialization-mt boost_filesystem-mt boost_system-mt boost_mpi-mt mpi lwgeom geos_c
+program_LIBRARIES := mpfr boost_serialization-mt boost_filesystem-mt boost_system-mt boost_mpi-mt boost_program_options-mt mpi lwgeom geos_c
 
-CPPFLAGS =  -g -openmp -O3 -std=c++11 `gdal-config --cflags` `geos-config --cflags`
-#CPPFLAGS =  -g -openmp -O0 -std=c++11 `gdal-config --cflags` `geos-config --cflags`
+CPPFLAGS =  -g -O3 -std=c++11 `gdal-config --cflags` `geos-config --cflags` -fopenmp # -fstack-protector-all
+#CPPFLAGS =  -g -O0 -std=c++11 `gdal-config --cflags` `geos-config --cflags` # -fstack-security-check -fstack-protector-all
 CPPFLAGS += $(foreach includedir,$(program_INCLUDE_DIRS),-I$(includedir))
 
 LDFLAGS += `gdal-config --libs` `geos-config --libs`
