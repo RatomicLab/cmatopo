@@ -91,10 +91,23 @@ int prepare_zones(string& postgres_connect_str, GEOSHelper& geos, const GEOSGeom
 
     double sum_nb_lines = 0.;
 
-    PG db("postgresql://laurent@localhost/cmatopo");
+    size_t zsize = zones.size();
+    zones.resize(zsize + 4, nullptr);
 
-    for (int row = 0; row < 2; ++row) {
-        for (int col = 0; col < 2; ++col) {
+    #pragma omp parallel for num_threads(4) reduction(+:sum_nb_lines)
+    for (int i = 0; i < 4; ++i) {
+        PG db(postgres_connect_str);
+        int row, col;
+        switch(i)
+        {
+        case 0: row = 0; col = 0; break;
+        case 1: row = 0; col = 1; break;
+        case 2: row = 1; col = 0; break;
+        case 3: row = 1; col = 1; break;
+        };
+    //for (int row = 0; row < 2; ++row) {
+    //    for (int col = 0; col < 2; ++col) {
+
         OGREnvelope local_extent;
         local_extent.MinX = minX + col * local_width;
         local_extent.MaxX = local_extent.MinX + local_width;
@@ -102,7 +115,7 @@ int prepare_zones(string& postgres_connect_str, GEOSHelper& geos, const GEOSGeom
         local_extent.MaxY = local_extent.MinY + local_height;
 
         int nextId;
-        nextId = (*nextZoneId)++;
+        nextId = (*nextZoneId)+i;
         zone* z = new zone(nextId, local_extent);
 
         /**
@@ -125,8 +138,10 @@ int prepare_zones(string& postgres_connect_str, GEOSHelper& geos, const GEOSGeom
 
         sum_nb_lines += z->count();
 
-        zones.push_back(z);
-    }}
+        zones[zsize+i] = z;
+    }//}
+
+    (*nextZoneId) += 4;
 
     GEOSFree_r(hdl, hex_extent);
 
