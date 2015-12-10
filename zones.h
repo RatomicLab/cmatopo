@@ -24,6 +24,7 @@ typedef std::pair<int, group_t> depth_group_t;
 extern GEOSContextHandle_t hdl;
 
 int prepare_zones(
+    std::string& postgres_connect_str,
     GEOSHelper& geos,
     const GEOSGeometry* extent,
     std::vector<zone*>& zones,

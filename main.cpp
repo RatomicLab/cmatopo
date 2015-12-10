@@ -119,7 +119,7 @@ int main(int argc, char **argv)
         GEOSGeometry* world_extent = world_geom();
         cout << "world geom: " << geos->as_string(world_extent) << endl;
         int nextZoneId = 0;
-        prepare_zones(*geos, world_extent, zones, groups, 20);
+        prepare_zones(postgres_connect_str, *geos, world_extent, zones, groups, 20);
         GEOSGeom_destroy_r(hdl, world_extent);
 
         // order groups by depth (furthest first)

@@ -62,7 +62,7 @@ void _minmax_extent(const GEOSGeometry* extent, double* minX, double* maxX,
     *maxY = *(minmaxY.second);
 }
 
-int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent,
+int prepare_zones(string& postgres_connect_str, GEOSHelper& geos, const GEOSGeometry* extent,
     vector<zone*>& zones, vector<depth_group_t>& grouping, int maxdepth,
     int* nextZoneId)
 {
@@ -147,7 +147,7 @@ int prepare_zones(GEOSHelper& geos, const GEOSGeometry* extent,
         if (z->count() > 15000) {
             vector<zone*> subzones;
             sum_nb_lines -= z->count();
-            sum_nb_lines += prepare_zones(geos, z->geom(), subzones, grouping, maxdepth-1, nextZoneId);
+            sum_nb_lines += prepare_zones(postgres_connect_str, geos, z->geom(), subzones, grouping, maxdepth-1, nextZoneId);
 
             auto oldIt = find(begin(zones), end(zones), z);
             auto newIt = zones.erase(oldIt);
