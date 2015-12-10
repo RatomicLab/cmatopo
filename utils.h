@@ -11,7 +11,6 @@ namespace cma {
 
 extern GEOSContextHandle_t hdl;
 
-int get_nb_threads();
 void geos_message_function(const char *fmt, ...);
 
 class GEOSHelper
