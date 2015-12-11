@@ -1780,8 +1780,6 @@ void Topology::add_relation(int topogeoId, relation* r, bool dupcheck)
     }
     assert (topogeoId < _relations.size());
 
-    _transactions->push_back(new AddRelationTransaction(*this, r));
-
     if (dupcheck) {
         auto it = find_if(
             _relations[topogeoId]->begin(),
@@ -1794,6 +1792,8 @@ void Topology::add_relation(int topogeoId, relation* r, bool dupcheck)
             return;
         }
     }
+
+    _transactions->push_back(new AddRelationTransaction(*this, r));
     _relations[topogeoId]->push_back(r);
 }
 
