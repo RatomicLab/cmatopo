@@ -607,6 +607,9 @@ GEOSGeometry* ST_LineInterpolatePoint(const GEOSGeometry* geom, double distance)
             GEOSGeomGetY_r(hdl, p1, &p1y);
             GEOSGeomGetY_r(hdl, p2, &p2y);
 
+            GEOSGeom_destroy_r(hdl, p1);
+            GEOSGeom_destroy_r(hdl, p2);
+
             double x = p1x + ((p2x-p1x)*dseg);
             double y = p1y + ((p2y-p1y)*dseg);
 
