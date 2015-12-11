@@ -1,6 +1,7 @@
 #include <ctime>
 #include <chrono>
 #include <cassert>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <functional>
@@ -38,13 +39,13 @@ namespace cma {
 }
 
 bool slave_exchange_topologies(
-    vector<Topology*>& currentTopologies,
+    GEOSHelper* geos,
     vector<Topology*>& newTopologies);
 
 void exchange_topologies(
-    pair<int, int>& fz1,
-    pair<int, int>& fz2,
-    vector<Topology*>& currentTopologies,
+    GEOSHelper* geos,
+    pair<zone*, int>& fz1,
+    pair<zone*, int>& fz2,
     vector<Topology*>& newTopologies);
 
 int main(int argc, char **argv)
@@ -98,7 +99,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int line_count = db.get_line_count();
+    int line_count;
+    if (world.rank() == 0) {
+        line_count = db.get_line_count();
+    }
+    broadcast(world, line_count, 0);
     assert (line_count >= 0);
 
     vector<int>* zonesPerProcess = new vector<int>(world.size());
@@ -118,8 +123,14 @@ int main(int argc, char **argv)
     if (world.rank() == 0) {
         GEOSGeometry* world_extent = world_geom();
         cout << "world geom: " << geos->as_string(world_extent) << endl;
-        int nextZoneId = 0;
-        prepare_zones(postgres_connect_str, *geos, world_extent, zones, groups, 20);
+
+        if (!restore_zones(zones, groups)) {
+            prepare_zones(postgres_connect_str, *geos, world_extent, zones, groups, 20);
+            save_zones(zones, groups);
+        }
+        assert (!zones.empty());
+        assert (!groups.empty());
+
         GEOSGeom_destroy_r(hdl, world_extent);
 
         // order groups by depth (furthest first)
@@ -191,7 +202,8 @@ int main(int argc, char **argv)
         if (lines.size() == 0) {
             Topology* topology = new Topology(geos.get());
             topology->zoneId(z->id());
-            myTopologies.push_back(topology);
+            save_topology(geos.get(), z, topology);
+            delete topology;
             continue;
         }
 
@@ -206,7 +218,7 @@ int main(int argc, char **argv)
             }
             cout << "[" << world.rank() << "] topology for zone #" << zoneId
                  << " has been restored from a checkpoint." << endl;
-            myTopologies.push_back(topology);
+            delete topology;
             continue;
         }
 
@@ -289,21 +301,28 @@ int main(int argc, char **argv)
             assert (next_groups.size() > 0);
 
             for (int gIdx = 0; gIdx < next_groups.size(); ++gIdx) {
-                // broadcast a pair of <zoneId, rank> so the owner of the topology
-                // can forward it to the right process
-                pair<int, int> fz1 = make_pair(next_groups[gIdx].second[0], nextRank);
-                pair<int, int> fz2 = make_pair(next_groups[gIdx].second[1], nextRank);
+                // broadcast a pair of <zone*, rank> so the right rank can load it from disk
+                pair<zone*, int> fz1 = make_pair(
+                    get_zone_by_id(zones, next_groups[gIdx].second[0]),
+                    nextRank);
+                pair<zone*, int> fz2 = make_pair(
+                    get_zone_by_id(zones, next_groups[gIdx].second[1]),
+                    nextRank);
                 broadcast(world, fz1, 0);
                 broadcast(world, fz2, 0);
                 cout << "[" << world.rank() << "] queuing join of topologies #" << fz1.first << " and " << fz2.first << endl;
-                exchange_topologies(fz1, fz2, myTopologies, topologiesToMerge);
+                exchange_topologies(geos.get(), fz1, fz2, topologiesToMerge);
 
-                fz1 = make_pair(next_groups[gIdx].second[2], nextRank);
-                fz2 = make_pair(next_groups[gIdx].second[3], nextRank);
+                fz1 = make_pair(
+                    get_zone_by_id(zones, next_groups[gIdx].second[2]),
+                    nextRank);
+                fz2 = make_pair(
+                    get_zone_by_id(zones, next_groups[gIdx].second[3]),
+                    nextRank);
                 broadcast(world, fz1, 0);
                 broadcast(world, fz2, 0);
                 cout << "[" << world.rank() << "] queuing join of topologies #" << fz1.first << " and " << fz2.first << endl;
-                exchange_topologies(fz1, fz2, myTopologies, topologiesToMerge);
+                exchange_topologies(geos.get(), fz1, fz2, topologiesToMerge);
 
                 if (++nextRank == world.size()) {
                     nextRank = 0;
@@ -323,17 +342,17 @@ int main(int argc, char **argv)
             }
 
             // signal that we're done for this round of merging
-            pair<int, int> fz1 = make_pair(-1, -1);
+            pair<zone*, int> fz1 = make_pair(nullptr, -1);
             broadcast(world, fz1, 0);
         }
         else {
-            slave_exchange_topologies(myTopologies, topologiesToMerge);
+            slave_exchange_topologies(geos.get(), topologiesToMerge);
         }
 
         // pair-wise merge
         vector<zone*> newZones;
         orphan_count +=
-            merge_topologies(db, geos.get(), zones, topologiesToMerge, newZones, myTopologies);
+            merge_topologies(db, geos.get(), zones, topologiesToMerge, newZones);
         assert (topologiesToMerge.empty());
 
         vector< vector<zone*> > vz;
@@ -369,18 +388,14 @@ int main(int argc, char **argv)
         cout << "total processed lines: " << zones[0]->count() << endl;
     }
 
-    // TODO: get topology to rank 0
-    // it's in myTopologies on a random rank
 
     assert (zones.size() == 1);
-    auto topoIt = find_if(myTopologies.begin(), myTopologies.end(), [zones](const Topology* t) {
-        return t->zoneId() == zones[0]->id();
-    });
-    if (topoIt != myTopologies.end()) {
-        // we are on the rank who owns the last topology
+    if (world.rank() == 0) {
+        Topology *topology = restore_topology(geos.get(), zones[0]);
         std::ofstream ofs("topology.ser");
         boost::archive::binary_oarchive oa(ofs);
-        oa << **topoIt;
+        oa << *topology;
+        delete topology;
     }
 
     for (const zone* z : zones) {
@@ -396,91 +411,58 @@ int main(int argc, char **argv)
     zonesPerProcess->clear();
     delete zonesPerProcess;
 
-    for (Topology* t : myTopologies) {
-        delete t;
-    }
-    myTopologies.clear();
-
     finishGEOS();
 
     return 0;
 }
 
 bool slave_exchange_topologies(
-    vector<Topology*>& currentTopologies,
+    GEOSHelper* geos,
     vector<Topology*>& newTopologies)
 {
     communicator world;
 
-    pair<int, int> fz1;
-    pair<int, int> fz2;
+    pair<zone*, int> fz1;
+    pair<zone*, int> fz2;
 
     do {
         broadcast(world, fz1, 0);
-        if (fz1.first != -1) {
+        if (fz1.first != nullptr) {
             broadcast(world, fz2, 0);
             assert (fz1.second == fz2.second);
+
             exchange_topologies(
+                geos,
                 fz1, fz2,
-                currentTopologies, newTopologies
+                newTopologies
             );
         }
-    } while (fz1.first != -1);
+    } while (fz1.first != nullptr);
 }
 
 void exchange_topologies(
-    pair<int, int>& fz1,
-    pair<int, int>& fz2,
-    vector<Topology*>& currentTopologies,
+    GEOSHelper* geos,
+    pair<zone*, int>& fz1,
+    pair<zone*, int>& fz2,
     vector<Topology*>& newTopologies)
 {
     communicator world;
 
-    vector<Topology*> send;
-    for (Topology* t : currentTopologies) {
-        if (t->zoneId() == fz1.first || t->zoneId() == fz2.first) {
-            send.push_back(t);
-        }
-    }
-
-    // proceed with exchange
-    vector< vector<Topology*> > recv;
-    gather(world, send, recv, fz1.second);
-
-    // if we are the receiver, append the new topologies we just received
     if (world.rank() == fz1.second) {
-        int previous_size = newTopologies.size();
-        for (vector<Topology*>& v : recv) {
-            if (v.size() > 0) {
-                newTopologies.insert(newTopologies.end(), v.begin(), v.end());
-            }
-        }
+        Topology* t1 = restore_topology(geos, fz1.first);
+        Topology* t2 = restore_topology(geos, fz2.first);
 
-        assert (newTopologies.size() == previous_size+2);
+        assert (t1 && t2);
 
-        if (newTopologies[newTopologies.size()-2]->zoneId() != fz1.first) {
-            assert (newTopologies[newTopologies.size()-1]->zoneId() == fz1.first);
-            assert (newTopologies[newTopologies.size()-2]->zoneId() == fz2.first);
+        newTopologies.push_back(t1);
+        newTopologies.push_back(t2);
+
+        if (newTopologies[newTopologies.size()-2]->zoneId() != fz1.first->id()) {
+            assert (newTopologies[newTopologies.size()-1]->zoneId() == fz1.first->id());
+            assert (newTopologies[newTopologies.size()-2]->zoneId() == fz2.first->id());
             Topology* tmp = newTopologies[newTopologies.size()-2];
             newTopologies[newTopologies.size()-2] = newTopologies[newTopologies.size()-1];
             newTopologies[newTopologies.size()-1] = tmp;
-        }
-    }
-
-    // if we are the sender, clean up the topologies we just sent
-    if (send.size() > 0) {
-        for (Topology* t : send) {
-            assert (_is_in(t, currentTopologies));
-            currentTopologies.erase(
-                find(
-                    begin(currentTopologies),
-                    end(currentTopologies),
-                    t
-                )
-            );
-            if (world.rank() != fz1.second) {
-                delete t;
-            }
         }
     }
 }

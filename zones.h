@@ -47,6 +47,9 @@ zone* get_zone_by_id(const std::vector<zone*>& zones, int zoneId);
 Topology* restore_topology(GEOSHelper* geos, zone* z);
 void save_topology(GEOSHelper* geos, zone* z, Topology* t);
 
+bool restore_zones(std::vector<zone*>& zones, std::vector<depth_group_t>& groups);
+void save_zones(std::vector<zone*>& zones, std::vector<depth_group_t>& groups);
+
 /**
  * Return a geometry (polygon) which represents the entire world.
  * The resulting geometry must be freed by the caller (GEOSGeom_destroy_r).

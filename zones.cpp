@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include <boost/filesystem/path.hpp>
+#include <boost/serialization/array.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/filesystem/operations.hpp>
 
@@ -368,6 +369,47 @@ void save_topology(GEOSHelper* geos, zone* z, Topology* t)
     ofstream ofs(oss.str());
     boost::archive::binary_oarchive oa(ofs);
     oa << *t;
+    ofs.close();
+}
+
+bool restore_zones(vector<zone*>& zones, vector<depth_group_t>& groups)
+{
+    assert (zones.empty());
+    assert (groups.empty());
+
+    string filename = "zones.ser";
+
+    ifstream ifs(filename);
+    if (!ifs.is_open()) {
+        return false;
+    }
+
+    cout << "restoring zones & groups information from " << filename << endl;
+
+    boost::archive::binary_iarchive ia(ifs);
+    ia >> zones;
+    ia >> groups;
+
+    cout << "found " << zones.size() << " zones & " << groups.size() << " groups" << endl;
+
+    ifs.close();
+    return true;
+}
+
+void save_zones(vector<zone*>& zones, vector<depth_group_t>& groups)
+{
+    assert (!zones.empty());
+    assert (!groups.empty());
+
+    string filename = "zones.ser";
+
+    cout << "saving zones & groups information to " << filename << endl;
+
+    ofstream ofs(filename);
+    boost::archive::binary_oarchive oa(ofs);
+    oa << zones;
+    oa << groups;
+    ofs.close();
 }
 
 } // namespace cma

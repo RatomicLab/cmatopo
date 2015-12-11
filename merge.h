@@ -37,8 +37,7 @@ int merge_topologies(
     GEOSHelper* geos,
     std::vector<zone*> zones,     // get a copy of the zones, this is not a mistake
     std::vector<Topology*>& topologies,
-    std::vector<zone*>& new_zones,
-    std::vector<Topology*>& new_topologies
+    std::vector<zone*>& new_zones
 );
 
 /**

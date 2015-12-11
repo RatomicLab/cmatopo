@@ -125,8 +125,7 @@ int merge_topologies(
     GEOSHelper* geos,
     vector<zone*> zones,
     vector<Topology*>& topologies,
-    vector<zone*>& new_zones,
-    vector<Topology*>& new_topologies)
+    vector<zone*>& new_zones)
 {
     assert (new_zones.empty());
 
@@ -188,7 +187,7 @@ int merge_topologies(
             delete z;
         }
 
-        new_topologies.push_back(t[0]);
+        save_topology(geos, new_zones[new_zones.size()-1], t[0]);
     }
     topologies.clear();
 
