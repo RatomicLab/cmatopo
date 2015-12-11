@@ -49,7 +49,7 @@ bool ST_IsEmpty(const GEOSGeom geom)
  */
 bool ST_Contains(const GEOSGeom g1, const GEOSGeom g2)
 {
-    return GEOSContains_r(hdl, g1, g2);
+    return GEOSContains_r(hdl, g1, g2) == 1;
 }
 
 /**
@@ -571,6 +571,60 @@ GEOSGeom ST_RemoveRepeatedPoints(const GEOSGeom geom)
     lwgeom_free(outgeom);
 
     return ret;
+}
+
+GEOSGeometry* ST_LineInterpolatePoint(const GEOSGeometry* geom, double distance)
+{
+    assert (distance >= 0. && distance <= 1.);
+    assert (geom && GEOSGeomTypeId_r(hdl, geom) == GEOS_LINESTRING);
+
+    if (distance == 0.) {
+        return GEOSGeomGetStartPoint_r(hdl, geom);
+    }
+    if (distance == 1.) {
+        return GEOSGeomGetEndPoint_r(hdl, geom);
+    }
+
+    int nsegs = GEOSGeomGetNumPoints_r(hdl, geom) - 1;
+    double length, tlength = 0.;
+    GEOSLength_r(hdl, geom, &length);
+
+    for (int i = 0; i < nsegs; ++i) {
+        GEOSGeometry* p1 = GEOSGeomGetPointN_r(hdl, geom, i);
+        GEOSGeometry* p2 = GEOSGeomGetPointN_r(hdl, geom, i+1);
+
+        double slength;
+        GEOSDistance_r(hdl, p1, p2, &slength);
+        slength /= length;
+
+        if (distance < tlength + slength) {
+            double dseg = (distance - tlength) / slength;
+            // taken from interpolate_point4d
+
+            double p1x, p2x, p1y, p2y;
+            GEOSGeomGetX_r(hdl, p1, &p1x);
+            GEOSGeomGetX_r(hdl, p2, &p2x);
+            GEOSGeomGetY_r(hdl, p1, &p1y);
+            GEOSGeomGetY_r(hdl, p2, &p2y);
+
+            double x = p1x + ((p2x-p1x)*dseg);
+            double y = p1y + ((p2y-p1y)*dseg);
+
+            GEOSCoordSequence* seq = GEOSCoordSeq_create_r(hdl, 1, 2);
+            GEOSCoordSeq_setX_r(hdl, seq, 0, x);
+            GEOSCoordSeq_setY_r(hdl, seq, 0, y);
+            GEOSGeometry* pt = GEOSGeom_createPoint_r(hdl, seq);
+            GEOSSetSRID_r(hdl, pt, 3395);
+            return pt;
+        }
+
+        tlength += slength;
+
+        GEOSGeom_destroy_r(hdl, p1);
+        GEOSGeom_destroy_r(hdl, p2);
+    }
+
+    return GEOSGeomGetEndPoint_r(hdl, geom);
 }
 
 /**

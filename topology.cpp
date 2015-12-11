@@ -756,7 +756,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
 
         if (!_is_in(e->id, absNewRingEdges))
         {
-            GEOSGeom closestPoint = GEOSInterpolate_r(hdl, e->geom, 0.2);
+            GEOSGeom closestPoint = ST_LineInterpolatePoint(e->geom, 0.2);
             // sqlmm.sql.in:~3092
             bool c = GEOSIntersects_r(hdl, env, e->envelope()) == 1 && ST_Contains(shell_geoms, closestPoint);
             GEOSGeom_destroy_r(hdl, closestPoint);

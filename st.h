@@ -47,6 +47,7 @@ GEOSGeom ST_MakePolygon(const GEOSGeom geom);
 GEOSGeom ST_ClosestPoint(const GEOSGeom g1, const GEOSGeom g2);
 GEOSGeom ST_CollectionExtract(GEOSGeometry* collection, int type);
 GEOSGeom ST_RemoveRepeatedPoints(const GEOSGeom geom);
+GEOSGeometry* ST_LineInterpolatePoint(const GEOSGeometry* geom, double distane);
 
 int ST_NPoints(const GEOSGeometry* geom);
 
