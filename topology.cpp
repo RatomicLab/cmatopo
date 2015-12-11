@@ -339,17 +339,17 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     newEdge->end_node = end_node;
 
     bool isclosed = start_node == end_node;
-    GEOSGeom cleangeom = ST_RemoveRepeatedPoints(newEdge->geom);
+    GEOSGeometry* cleangeom = ST_RemoveRepeatedPoints(newEdge->geom);
 
-    GEOSGeom start_point = ST_StartPoint(cleangeom);
-    GEOSGeom second_point = ST_PointN(cleangeom, 2);
+    GEOSGeometry* start_point = ST_StartPoint(cleangeom);
+    GEOSGeometry* second_point = ST_PointN(cleangeom, 2);
     _span_t span;
     span.myaz = ST_Azimuth(start_point, second_point);
     GEOSGeom_destroy_r(hdl, start_point);
     GEOSGeom_destroy_r(hdl, second_point);
 
-    GEOSGeom end_point = ST_EndPoint(cleangeom);
-    GEOSGeom next_to_last_point = ST_PointN(cleangeom, GEOSGeomGetNumPoints_r(hdl, cleangeom)-1);
+    GEOSGeometry* end_point = ST_EndPoint(cleangeom);
+    GEOSGeometry* next_to_last_point = ST_PointN(cleangeom, GEOSGeomGetNumPoints_r(hdl, cleangeom)-1);
     _span_t epan;
     epan.myaz = ST_Azimuth(end_point, next_to_last_point);
     GEOSGeom_destroy_r(hdl, end_point);
@@ -375,9 +375,8 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
         }
     }
 
-    GEOSGeom start_node_geom = _nodes[start_node]->geom;
-    GEOSGeom end_node_geom = _nodes[end_node]->geom;
-
+    GEOSGeometry* start_node_geom = _nodes[start_node]->geom;
+    GEOSGeometry* end_node_geom = _nodes[end_node]->geom;
 
     GEOSGeometry* sp = ST_StartPoint(geom);
     GEOSGeometry* ep = ST_EndPoint(geom);
@@ -388,21 +387,23 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     GEOSGeom_destroy_r(hdl, sp);
     GEOSGeom_destroy_r(hdl, ep);
 
-    vector<int> nodeIds;
-    _intersects<node_idx_t, node_value>(_node_idx, geom, nodeIds);
-    for (int nodeId : nodeIds) {
+    vector<int>* nodeIds = new vector<int>;
+    _intersects<node_idx_t, node_value>(_node_idx, geom, *nodeIds);
+    for (int nodeId : *nodeIds) {
         node* n = _nodes[nodeId];
         char* relate = GEOSRelateBoundaryNodeRule_r(hdl, n->geom, geom, GEOSRELATE_BNR_ENDPOINT);
         if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
             GEOSFree_r(hdl, relate);
+            delete nodeIds;
             throw invalid_argument("SQL/MM Spatial exception - geometry crosses a node");
         }
         GEOSFree_r(hdl, relate);
     }
+    delete nodeIds;
 
-    vector<int> edgeIds;
-    _intersects<edge_idx_t, edge_value>(_edge_idx, geom, edgeIds);
-    for (int edgeId : edgeIds) {
+    vector<int>* edgeIds = new vector<int>;
+    _intersects<edge_idx_t, edge_value>(_edge_idx, geom, *edgeIds);
+    for (int edgeId : *edgeIds) {
         edge* e = _edges[edgeId];
 
         char* relate = GEOSRelateBoundaryNodeRule_r(hdl, e->geom, geom, GEOSRELATE_BNR_ENDPOINT);
@@ -414,6 +415,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
         if (GEOSRelatePatternMatch_r(hdl, relate, "1FFF*FFF2") == 1) {
             GEOSFree_r(hdl, relate);
+            delete edgeIds;
             ostringstream oss;
             oss << "SQL/MM Spatial exception - coincident edge " << edgeId;
             throw invalid_argument(oss.str());
@@ -421,6 +423,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
         if (GEOSRelatePatternMatch_r(hdl, relate, "1********") == 1) {
             GEOSFree_r(hdl, relate);
+            delete edgeIds;
             ostringstream oss;
             oss << "Spatial exception - geometry intersects edge " << edgeId;
             throw invalid_argument(oss.str());
@@ -428,6 +431,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
         if (GEOSRelatePatternMatch_r(hdl, relate, "T********") == 1) {
             GEOSFree_r(hdl, relate);
+            delete edgeIds;
             ostringstream oss;
             oss << "SQL/MM Spatial exception - geometry crosses edge " << edgeId;
             throw invalid_argument(oss.str());
@@ -435,6 +439,7 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
 
         GEOSFree_r(hdl, relate);
     }
+    delete edgeIds;
 
     // reserve next edge_id
     _edges.push_back(nullptr);
