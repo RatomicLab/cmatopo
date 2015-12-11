@@ -174,8 +174,6 @@ int main(int argc, char **argv)
 
     delete processZones;
 
-    vector<Topology*> myTopologies;
-
     int pline = 0;
     for (zone* z : myZones) {
         int zoneId = z->id();
@@ -254,9 +252,8 @@ int main(int argc, char **argv)
              << " at " << std::ctime(&end_time) << ","
              << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
 
-        myTopologies.push_back(topology);
-
         save_topology(geos.get(), z, topology);
+        delete topology;
     }
 
     broadcast(world, zones, 0);

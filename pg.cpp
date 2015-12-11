@@ -125,8 +125,13 @@ bool PG::get_lines(
         id = PQgetvalue(res, i, 0);
         line2d = PQgetvalue(res, i, 1);
         GEOSGeometry* line = GEOSWKBReader_readHEX_r(hdl, wkb_reader, (const unsigned char*)line2d, PQgetlength(res, i, 1));
-        assert (line != NULL);
-        lines.push_back(make_pair(atoi(id), line));
+        if (line != NULL) {
+            // assert (line != NULL);
+            lines.push_back(make_pair(atoi(id), line));
+        }
+        else {
+            cerr << "Line id " << id << " could not be converted to a GEOSGeometry..." << endl;
+        }
     }
     GEOSWKBReader_destroy_r(hdl, wkb_reader);
 
