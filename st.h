@@ -39,7 +39,7 @@ GEOSGeom ST_ForceRHR(const GEOSGeom geom);
 GEOSGeom ST_MakeLine(const GEOSGeom g1, const GEOSGeom g2);
 GEOSGeometry* ST_MakeLine(const std::vector<const GEOSGeometry*>& geometries);
 GEOSGeom ST_SetPoint(const GEOSGeometry* line, int index, const GEOSGeometry* point);
-GEOSGeom ST_BuildArea(const GEOSGeom geom);
+GEOSGeometry* ST_BuildArea(const GEOSGeometry* geom);
 GEOSGeom ST_GeometryN(const GEOSGeom geom, int index);
 GEOSGeom ST_MakeValid(const GEOSGeometry* geom);
 GEOSGeom ST_StartPoint(const GEOSGeometry* geom);

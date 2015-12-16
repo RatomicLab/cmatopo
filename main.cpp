@@ -233,15 +233,24 @@ int main(int argc, char **argv)
                 topology->TopoGeo_AddLineString(lineId, line, DEFAULT_TOLERANCE);
                 topology->commit();
             }
+            catch (const runtime_error& ex) {
+                cerr << "Line #" << topology->count() << " - " << geos->as_string(line) << ": " << ex.what() << endl;
+                cerr << "Cannot complete topology for zone id #" << topology->zoneId() << endl;
+                topology->rollback();
+                delete topology;
+                topology = new Topology();
+                topology->zoneId(z->id());
+                break;
+            }
             catch (const invalid_argument& ex) {
-                cerr << geos->as_string(line) << ": " << ex.what() << endl;
+                cerr << "Line #" << topology->count() << " - " << geos->as_string(line) << ": " << ex.what() << endl;
                 topology->rollback();
             }
 
             GEOSGeom_destroy_r(hdl, line);
 
             if (++lc % 100 == 0) {
-                cout << lc << endl;
+                // cout << lc << endl;
             }
         }
         lines.clear();

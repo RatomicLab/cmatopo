@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cassert>
+#include <sstream>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -1126,6 +1127,13 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         _transactions->push_back(new FaceTransaction(*this, f));
 
         GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->left_face);
+        if (!faceGeom) {
+            // this should not (?) happen
+            ostringstream oss;
+            oss << "faceGeom is null when inserting line " << _totalCount
+                << " for zone #" << zoneId();
+            throw runtime_error(oss.str());
+        }
         f->geom = ST_Envelope(faceGeom);
     }
 
@@ -1135,6 +1143,13 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         _transactions->push_back(new FaceTransaction(*this, f));
 
         GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->right_face);
+        if (!faceGeom) {
+            // this should not (?) happen
+            ostringstream oss;
+            oss << "faceGeom is null when inserting line " << _totalCount
+                << " for zone #" << zoneId();
+            throw runtime_error(oss.str());
+        }
         f->geom = ST_Envelope(faceGeom);
     }
 
@@ -1319,7 +1334,7 @@ void Topology::GetNodeEdges(int nodeId, vector<int>& edgeIds)
  * Mostly equivalent to the following function (topology/sql/sqlmm.sql.in):
  *   FUNCTION topology.ST_ModEdgeSplit(atopology varchar, anedge integer, apoint geometry)
  */
-GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
+GEOSGeometry* Topology::ST_GetFaceGeometry(int faceId)
 {
     // face 0 is invalid (universal face)
     assert (faceId > 0 && faceId < _faces.size() && _faces[faceId] != nullptr);
@@ -1340,8 +1355,19 @@ GEOSGeom Topology::ST_GetFaceGeometry(int faceId)
         _gfg_geometries->data(),
         _gfg_geometries->size()
     );
+    GEOSSetSRID_r(hdl, coll, 3395);
 
-    GEOSGeom ret = ST_BuildArea(coll);
+    GEOSGeometry* ret = ST_BuildArea(coll);
+
+    if (ret == nullptr) {
+        // This is to catch numerical errors that sometime happens here.
+        // We set the precision to 10e-6 meters so that linestrings
+        // can snap together.
+        GEOSGeometry* tmp = coll;
+        coll = GEOSGeom_setPrecision_r(hdl, coll, 10e-6, 0);
+        GEOSGeom_destroy_r(hdl, tmp);
+        ret = ST_BuildArea(coll);
+    }
 
     GEOSGeom_destroy_r(hdl, coll);
     _gfg_geometries->clear();

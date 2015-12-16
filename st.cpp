@@ -394,22 +394,22 @@ GEOSGeom ST_SetPoint(const GEOSGeometry* line, int index, const GEOSGeometry* po
  * Mostly equivalent to the following function (postgis/lwgeom_geos.c):
  *   Datum ST_BuildArea(PG_FUNCTION_ARGS)
  */
-GEOSGeom ST_BuildArea(const GEOSGeom geom)
+GEOSGeometry* ST_BuildArea(const GEOSGeometry* geom)
 {
-    LWGEOM* lwgeom_in = GEOS2LWGEOM(geom, 0);
-    LWGEOM* lwgeom_out;
+    GEOSGeometry* ret = nullptr;
 
-    lwgeom_out = lwgeom_buildarea(lwgeom_in);
-
-    if (!lwgeom_out) {
-        lwgeom_free(lwgeom_in);
-        return NULL;
+    if (GEOSisEmpty_r(hdl, geom) == 1) {
+        ret = GEOSGeom_createEmptyPolygon_r(hdl);
+        GEOSSetSRID_r(hdl, ret, 3395);
+        return ret;
     }
 
-    GEOSGeom ret = LWGEOM2GEOS(lwgeom_out);
+    ret = LWGEOM_GEOS_buildArea(geom);
 
-    lwgeom_free(lwgeom_in);
-    lwgeom_free(lwgeom_out);
+    if (!ret || GEOSGetNumGeometries_r(hdl, ret) == 0) {
+        if (ret) GEOSGeom_destroy_r(hdl, ret);
+        return nullptr;
+    }
 
     return ret;
 }
