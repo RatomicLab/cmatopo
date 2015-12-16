@@ -345,12 +345,20 @@ Topology* restore_topology(GEOSHelper* geos, zone* z)
     cout << "restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
 
     Topology* t = new Topology();
-    boost::archive::binary_iarchive ia(ifs);
-    ia >> *t;
+    try {
+        boost::archive::binary_iarchive ia(ifs);
+        ia >> *t;
+    } catch (const boost::archive::archive_exception&) {
+        delete t;
+        t = nullptr;
+    }
 
     ifs.close();
 
-    t->rebuild_indexes();
+    if (t) {
+        t->rebuild_indexes();
+    }
+
     return t;
 }
 
