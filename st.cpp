@@ -49,6 +49,9 @@ bool ST_IsEmpty(const GEOSGeom geom)
  */
 bool ST_Contains(const GEOSGeom g1, const GEOSGeom g2)
 {
+    if (!g1 || !g2) {
+        return false;
+    }
     return GEOSContains_r(hdl, g1, g2) == 1;
 }
 
@@ -254,6 +257,10 @@ GEOSGeom ST_EndPoint(const GEOSGeometry* geom)
 
 GEOSGeom ST_Envelope(const GEOSGeom geom)
 {
+    if (!geom) {
+        return nullptr;
+    }
+
     LWGEOM *lwgeom = GEOS2LWGEOM(geom, 0);
     GBOX box;
     lwgeom_calculate_gbox(lwgeom, &box);
