@@ -182,6 +182,23 @@ int main(int argc, char **argv)
         chrono::time_point<chrono::system_clock> start, end;
         start = chrono::system_clock::now();
 
+        Topology* topology = restore_topology(geos.get(), z);
+        if (topology) {
+            /*
+            if (topology->count() != lines.size()) {
+                cerr << "restored topology for zone #" << topology->zoneId() << " contains "
+                     << topology->count() << " roads but should contain " << lines.size()
+                     << " according to the database." << endl;
+                exit(1);
+            }
+            */
+            cout << "[" << world.rank() << "] topology for zone #" << zoneId
+                 << " has been restored from a checkpoint." << endl;
+            pline += topology->count();
+            delete topology;
+            continue;
+        }
+
         GEOSGeometry* zoneGeom =
             GEOSWKTReader_read_r(hdl, geos->text_reader(), hexWKT.c_str());
 
@@ -201,21 +218,6 @@ int main(int argc, char **argv)
             Topology* topology = new Topology(geos.get());
             topology->zoneId(z->id());
             save_topology(geos.get(), z, topology);
-            delete topology;
-            continue;
-        }
-
-        Topology* topology = restore_topology(geos.get(), z);
-
-        if (topology) {
-            if (topology->count() != lines.size()) {
-                cerr << "restored topology for zone #" << topology->zoneId() << " contains "
-                     << topology->count() << " roads but should contain " << lines.size()
-                     << " according to the database." << endl;
-                exit(1);
-            }
-            cout << "[" << world.rank() << "] topology for zone #" << zoneId
-                 << " has been restored from a checkpoint." << endl;
             delete topology;
             continue;
         }
