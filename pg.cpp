@@ -76,9 +76,9 @@ int PG::get_line_count()
         return -1;
     }
 
-    char* count = PQgetvalue(res, 0, 0);
+    int count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
-    return atoi(count);
+    return count;
 }
 
 GEOSGeometry* PG::get_line(int id)
@@ -211,7 +211,6 @@ bool PG::get_line_ids(
     }
 
     PQclear(res);
-
     return true;
 }
 
