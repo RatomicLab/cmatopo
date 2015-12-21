@@ -329,7 +329,7 @@ zone* get_zone_by_id(const vector<zone*>& zones, int zoneId)
     return *it;
 }
 
-Topology* restore_topology(GEOSHelper* geos, zone* z)
+Topology* restore_topology(GEOSHelper* geos, zone* z, bool buildIndex)
 {
     assert (z);
     assert (geos);
@@ -355,7 +355,7 @@ Topology* restore_topology(GEOSHelper* geos, zone* z)
 
     ifs.close();
 
-    if (t) {
+    if (t && buildIndex) {
         t->rebuild_indexes();
     }
 

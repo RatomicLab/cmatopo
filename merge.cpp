@@ -124,7 +124,7 @@ int merge_topologies(
     PG& db,
     GEOSHelper* geos,
     vector<zone*> zones,
-    vector<Topology*>& topologies,
+    vector<int>& topologies,
     vector<zone*>& new_zones)
 {
     assert (new_zones.empty());
@@ -142,8 +142,9 @@ int merge_topologies(
 
         for (int j = 0; j < 2; ++j)
         {
-            Topology* t1 = topologies[i*4+j*2];
-            Topology* t2 = topologies[i*4+j*2+1];
+            Topology* t1 = restore_topology(geos, get_zone_by_id(zones, topologies[i*4+j*2]));
+            Topology* t2 = restore_topology(geos, get_zone_by_id(zones, topologies[i*4+j*2+1]), false);
+            assert (t1 && t2);
 
             int z2_id = t2->zoneId();
 
@@ -152,7 +153,7 @@ int merge_topologies(
                 _internal_merge(db, geos, zones, &t1, t2, temp_new_zones);
             if (t1 != t1t) {
                 // a swap occured
-                topologies[i*4+j*2] = t1;
+                topologies[i*4+j*2] = t1->zoneId();
             }
 
             t[j] = t1;
@@ -188,6 +189,7 @@ int merge_topologies(
         }
 
         save_topology(geos, new_zones[new_zones.size()-1], t[0]);
+        delete t[0];
     }
     topologies.clear();
 
@@ -291,8 +293,8 @@ int _internal_merge(
     else {
         merge_topologies(**t1, *t2);
         (*t1)->rebuild_indexes();
-        delete t2;
     }
+    delete t2;
 
     linesV orphans;
     db.get_common_lines(z1->envelope(), z2->envelope(), orphans);

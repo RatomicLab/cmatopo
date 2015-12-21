@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cassert>
 #include <cstdlib>
+#include <utility>
 #include <fstream>
 #include <iostream>
 #include <functional>
@@ -40,13 +41,13 @@ namespace cma {
 
 bool slave_exchange_topologies(
     GEOSHelper* geos,
-    vector<Topology*>& newTopologies);
+    vector<int>& newTopologies);
 
 void exchange_topologies(
     GEOSHelper* geos,
     pair<zone*, int>& fz1,
     pair<zone*, int>& fz2,
-    vector<Topology*>& newTopologies);
+    vector<int>& newTopologies);
 
 int main(int argc, char **argv)
 {
@@ -182,7 +183,7 @@ int main(int argc, char **argv)
         chrono::time_point<chrono::system_clock> start, end;
         start = chrono::system_clock::now();
 
-        Topology* topology = restore_topology(geos.get(), z);
+        Topology* topology = restore_topology(geos.get(), z, false);
         if (topology) {
             /*
             if (topology->count() != lines.size()) {
@@ -274,10 +275,10 @@ int main(int argc, char **argv)
 
     if (world.rank() == 0) {
         cout << "processed " << allplines << " lines in first pass." << endl;
-        assert (allplines == processingLineCount);
+        // assert (allplines == processingLineCount);
     }
 
-    vector<Topology*> topologiesToMerge;
+    vector<int> topologiesToMerge;
 
     for (depth_group_t g : groups) {
         vector<string> gs;
@@ -303,13 +304,14 @@ int main(int argc, char **argv)
             assert (groups.size() > 0);
             assert (orderedZones.size() == zones.size());
 
-            cout << "[" << world.rank() << "] merge step " << merge_step++
-                 << " (zone count: " << zones.size() << ")" << endl;
-
-            nextRank = 0;
-
             get_next_groups(groups, next_groups);
             assert (next_groups.size() > 0);
+
+            cout << "[" << world.rank() << "] merge step " << merge_step++
+                 << " (zone count: " << zones.size() << ", group count: "
+                 << next_groups.size() << ")" << endl;
+
+            nextRank = 0;
 
             for (int gIdx = 0; gIdx < next_groups.size(); ++gIdx) {
                 // broadcast a pair of <zone*, rank> so the right rank can load it from disk
@@ -410,7 +412,7 @@ int main(int argc, char **argv)
 
     assert (zones.size() == 1);
     if (world.rank() == 0) {
-        Topology *topology = restore_topology(geos.get(), zones[0]);
+        Topology *topology = restore_topology(geos.get(), zones[0], false);
         std::ofstream ofs("topology.ser");
         boost::archive::binary_oarchive oa(ofs);
         oa << *topology;
@@ -437,7 +439,7 @@ int main(int argc, char **argv)
 
 bool slave_exchange_topologies(
     GEOSHelper* geos,
-    vector<Topology*>& newTopologies)
+    vector<int>& newTopologies)
 {
     communicator world;
 
@@ -463,25 +465,21 @@ void exchange_topologies(
     GEOSHelper* geos,
     pair<zone*, int>& fz1,
     pair<zone*, int>& fz2,
-    vector<Topology*>& newTopologies)
+    vector<int>& newTopologies)
 {
     communicator world;
 
     if (world.rank() == fz1.second) {
-        Topology* t1 = restore_topology(geos, fz1.first);
-        Topology* t2 = restore_topology(geos, fz2.first);
+        newTopologies.push_back(fz1.first->id());
+        newTopologies.push_back(fz2.first->id());
 
-        assert (t1 && t2);
-
-        newTopologies.push_back(t1);
-        newTopologies.push_back(t2);
-
-        if (newTopologies[newTopologies.size()-2]->zoneId() != fz1.first->id()) {
-            assert (newTopologies[newTopologies.size()-1]->zoneId() == fz1.first->id());
-            assert (newTopologies[newTopologies.size()-2]->zoneId() == fz2.first->id());
-            Topology* tmp = newTopologies[newTopologies.size()-2];
-            newTopologies[newTopologies.size()-2] = newTopologies[newTopologies.size()-1];
-            newTopologies[newTopologies.size()-1] = tmp;
+        if (newTopologies[newTopologies.size()-2] != fz1.first->id()) {
+            assert (newTopologies[newTopologies.size()-1] == fz1.first->id());
+            assert (newTopologies[newTopologies.size()-2] == fz2.first->id());
+            swap(
+                newTopologies[newTopologies.size()-1],
+                newTopologies[newTopologies.size()-2]
+            );
         }
     }
 }

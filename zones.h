@@ -44,7 +44,7 @@ void register_zones(
 
 zone* get_zone_by_id(const std::vector<zone*>& zones, int zoneId);
 
-Topology* restore_topology(GEOSHelper* geos, zone* z);
+Topology* restore_topology(GEOSHelper* geos, zone* z, bool buildIndex=true);
 void save_topology(GEOSHelper* geos, zone* z, Topology* t);
 
 bool restore_zones(std::vector<zone*>& zones, std::vector<depth_group_t>& groups);
