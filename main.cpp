@@ -295,6 +295,9 @@ int main(int argc, char **argv)
         int current_depth;
         vector<zone*> to_delete;
 
+        chrono::time_point<chrono::system_clock> _start, _end;
+        _start = chrono::system_clock::now();
+
         vector<depth_group_t> next_groups;
         if (world.rank() == 0) {
             assert (groups.size() > 0);
@@ -318,7 +321,7 @@ int main(int argc, char **argv)
                     nextRank);
                 broadcast(world, fz1, 0);
                 broadcast(world, fz2, 0);
-                cout << "[" << world.rank() << "] queuing join of topologies #" << fz1.first << " and " << fz2.first << endl;
+                cout << "[" << world.rank() << "] queuing join of topologies #" << fz1.first->id() << " and " << fz2.first->id() << endl;
                 exchange_topologies(geos.get(), fz1, fz2, topologiesToMerge);
 
                 fz1 = make_pair(
@@ -329,7 +332,7 @@ int main(int argc, char **argv)
                     nextRank);
                 broadcast(world, fz1, 0);
                 broadcast(world, fz2, 0);
-                cout << "[" << world.rank() << "] queuing join of topologies #" << fz1.first << " and " << fz2.first << endl;
+                cout << "[" << world.rank() << "] queuing join of topologies #" << fz1.first->id() << " and " << fz2.first->id() << endl;
                 exchange_topologies(geos.get(), fz1, fz2, topologiesToMerge);
 
                 if (++nextRank == world.size()) {
@@ -388,6 +391,14 @@ int main(int argc, char **argv)
             for (const zone* z : zones) {
                 cout << "zone #" << z->id() << " count: " << z->count() << endl;
             }
+
+            _end = chrono::system_clock::now();
+            chrono::duration<double> elapsed_seconds = _end-_start;
+            time_t end_time = chrono::system_clock::to_time_t(_end);
+
+            cout << "[" << world.rank() << "] merge step " << (merge_step-1)
+                 << " at " << std::ctime(&end_time) << ","
+                 << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
         }
     }
 
