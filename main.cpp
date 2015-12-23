@@ -260,8 +260,9 @@ int main(int argc, char **argv)
         chrono::duration<double> elapsed_seconds = end-start;
         time_t end_time = chrono::system_clock::to_time_t(end);
 
+        char* t = std::ctime(&end_time); t[strlen(t)-2] = '\0';
         cout << "[" << world.rank() << "] finished computation of zone #" << zoneId
-             << " at " << std::ctime(&end_time) << ","
+             << " at " << t << ","
              << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
 
         save_topology(geos.get(), z, topology);
@@ -398,8 +399,9 @@ int main(int argc, char **argv)
             chrono::duration<double> elapsed_seconds = _end-_start;
             time_t end_time = chrono::system_clock::to_time_t(_end);
 
+            char* t = std::ctime(&end_time); t[strlen(t)-2] = '\0';
             cout << "[" << world.rank() << "] merge step " << (merge_step-1)
-                 << " at " << std::ctime(&end_time) << ","
+                 << " at " << t << ","
                  << " elapsed time: " << elapsed_seconds.count() << "s" << endl;
         }
     }

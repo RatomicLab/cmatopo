@@ -11,6 +11,7 @@
 #include <boost/tuple/tuple.hpp>
 
 #include <boost/serialization/map.hpp>
+#include <boost/serialization/version.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
@@ -138,6 +139,10 @@ public:
         return _totalCount;
     }
 
+    int64_t& orphan_count() {
+        return _totalOrphans;
+    }
+
 private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
@@ -199,6 +204,11 @@ private:
      * Total linestrings that were added to this topology.
      */
     uint64_t _totalCount = 0;
+
+    /**
+     * Total orphan linestrings added to this topology.
+     */
+    int64_t _totalOrphans = -1;
 
     /**
      * Index of edges left faces.
@@ -356,8 +366,14 @@ void Topology::serialize(Archive & ar, const unsigned int version)
     ar & _zoneId;
     ar & _totalCount;
     ar & _topogeom_relations;
+
+    if (version > 0) {
+        ar & _totalOrphans;
+    }
 }
 
 } // namespace cma
+
+BOOST_CLASS_VERSION(cma::Topology, 1)
 
 #endif // __CMA_TOPOLOGY_H

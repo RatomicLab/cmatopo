@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include <boost/filesystem/path.hpp>
+#include <boost/mpi/communicator.hpp>
 #include <boost/serialization/array.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -17,6 +18,7 @@
 #include <topology.h>
 
 using namespace std;
+using namespace boost::mpi;
 
 namespace fs = boost::filesystem;
 
@@ -337,18 +339,21 @@ Topology* restore_topology(GEOSHelper* geos, zone* z, bool buildIndex)
     ostringstream oss;
     oss << "topology-" << geos->as_hex_string(z->geom()) << ".ser";
 
+    communicator world;
+
     ifstream ifs(oss.str());
     if (!ifs.is_open()) {
+        cout << "[" << world.rank() << "] (file not found) error restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
         return nullptr;
     }
-
-    cout << "restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
 
     Topology* t = new Topology();
     try {
         boost::archive::binary_iarchive ia(ifs);
         ia >> *t;
+        cout << "[" << world.rank() << "] restored topology for zone #" << z->id() << " from " << oss.str() << endl;
     } catch (const boost::archive::archive_exception&) {
+        cout << "[" << world.rank() << "] error restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
         delete t;
         t = nullptr;
     }

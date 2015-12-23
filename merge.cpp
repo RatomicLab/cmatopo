@@ -188,8 +188,11 @@ int merge_topologies(
             delete z;
         }
 
-        save_topology(geos, new_zones[new_zones.size()-1], t[0]);
+        // merged topology has already been saved in _internal_merge
         delete t[0];
+
+        int progress = int(float((i+1)) / (topologies.size()/4) * 100.0);
+        cout << "[" << world.rank() << "] progress: " << progress << "%" << endl;
     }
     topologies.clear();
 
@@ -296,16 +299,34 @@ int _internal_merge(
     }
     delete t2;
 
+    /*
+    if (restored && (*t1)->orphan_count() >= 0) {
+        merged_zone->count(z1->count() + z2->count() + (*t1)->orphan_count());
+        new_zones.push_back(merged_zone);
+        return (*t1)->orphan_count();
+    }
+    */
+
     linesV orphans;
     db.get_common_lines(z1->envelope(), z2->envelope(), orphans);
     cout << "[" << world.rank() << "] adding " << orphans.size() << " lines to topology #"
          << (*t1)->zoneId() << " (lc: " << z1->count() << "+" << z2->count() << ")" << endl;
+    size_t orphan_count = orphans.size();
 
-    merged_zone->count(z1->count() + z2->count() + orphans.size());
+    merged_zone->count(z1->count() + z2->count() + orphan_count);
     new_zones.push_back(merged_zone);
 
     if (restored) {
-        return orphans.size();
+        (*t1)->orphan_count() += orphan_count;
+        save_topology(geos, merged_zone, *t1);
+
+        for (auto& orphan : orphans) {
+            GEOSGeometry *geom = orphan.second;
+            GEOSGeom_destroy_r(hdl, geom);
+        }
+        orphans.clear();
+
+        return orphan_count;
     }
 
     for (pair<int, GEOSGeometry*>& orphan : orphans) {
@@ -324,9 +345,15 @@ int _internal_merge(
     cout << "[" << world.rank() << "] added new merged topology for"
          << " zone #" << (*t1)->zoneId() << " (lc: " << merged_zone->count() << ")" << endl;
 
+    for (auto& orphan : orphans) {
+        GEOSGeometry *geom = orphan.second;
+        GEOSGeom_destroy_r(hdl, geom);
+    }
+    orphans.clear();
+
     save_topology(geos, merged_zone, *t1);
 
-    return orphans.size();
+    return orphan_count;
 }
 
 } // namespace cma
