@@ -545,7 +545,14 @@ int Topology::ST_AddEdgeModFace(int start_node, int end_node, GEOSGeometry* geom
     delete edgesToStartNode;
     delete edgesToEndNode;
 
-    assert (newEdge->left_face == newEdge->right_face);
+    if (newEdge->left_face != newEdge->right_face) {
+        ostringstream oss;
+        oss << "Left(" << newEdge->left_face << ")/right("
+            << newEdge->right_face << ") faces mismatch: invalid topology ?"
+            << endl;
+        throw invalid_argument(oss.str());
+    }
+
     assert (!_is_null(newEdge->left_face));
 
     add_edge(newEdge);
@@ -1932,10 +1939,11 @@ void Topology::rebuild_indexes()
 {
     assert (_transactions->empty());
 
+    assert (_left_faces_idx->size() == _right_faces_idx->size());
+    assert (_right_faces_idx->size() == _face_geometries->size());
+
     int faceCount = _faces.size();
     for (int i = 0 ; i < faceCount; ++i) {
-        assert (_left_faces_idx->size() == _right_faces_idx->size());
-        assert (_right_faces_idx->size() == _face_geometries->size());
         if (i >= _left_faces_idx->size()) {
             _left_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
             _right_faces_idx->push_back(edgeid_set_ptr(new edgeid_set));
@@ -1980,6 +1988,7 @@ void Topology::rebuild_indexes()
     }
 
     commit();
+    assert (_transactions->empty());
 }
 
 void Topology::output_edges() const
