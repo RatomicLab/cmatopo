@@ -68,6 +68,8 @@ class geom_container
 
       GEOSGeometry* geom = NULL;
 
+      static GEOSWKBReader* s_wkbr;
+
   protected:
       GEOSGeometry* _envelope = NULL;
       const GEOSPreparedGeometry* _prepared = NULL;
@@ -111,9 +113,14 @@ class geom_container
             ar & bin[i];
         }
 
-        GEOSWKBReader* wkbr = GEOSWKBReader_create();
-        geom = GEOSWKBReader_read(wkbr, bin, size);
-        GEOSWKBReader_destroy(wkbr);
+        if (!s_wkbr) {
+            GEOSWKBReader* wkbr = GEOSWKBReader_create();
+            geom = GEOSWKBReader_read(wkbr, bin, size);
+            GEOSWKBReader_destroy(wkbr);
+        }
+        else {
+            geom = GEOSWKBReader_read(s_wkbr, bin, size);
+        }
 
         delete [] bin;
     }
