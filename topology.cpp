@@ -1660,7 +1660,7 @@ void Topology::pg_output() const
     ofs.close();
 }
 
-void Topology::_update_indexes(const edge* e)
+void Topology::_update_indexes(const edge* e, bool transaction)
 {
     assert (e);
     assert (_edges.size() < MAX_INDEX_ELEM);
@@ -1694,25 +1694,29 @@ void Topology::_update_indexes(const edge* e)
     _edge_tol_idx->insert(make_pair(tolbounds, e->id));
 
     assert (e->left_face < _left_faces_idx->size());
-    _transactions->push_back(new AddFaceIndexTransaction(
-        *this,
-        _left_faces_idx,
-        e->left_face,
-        e->id
-    ));
+    if (transaction) {
+        _transactions->push_back(new AddFaceIndexTransaction(
+            *this,
+            _left_faces_idx,
+            e->left_face,
+            e->id
+        ));
+    }
     (*_left_faces_idx)[e->left_face]->insert(e->id);
 
     assert (e->right_face < _right_faces_idx->size());
-    _transactions->push_back(new AddFaceIndexTransaction(
-        *this,
-        _right_faces_idx,
-        e->right_face,
-        e->id
-    ));
+    if (transaction) {
+        _transactions->push_back(new AddFaceIndexTransaction(
+            *this,
+            _right_faces_idx,
+            e->right_face,
+            e->id
+        ));
+    }
     (*_right_faces_idx)[e->right_face]->insert(e->id);
 }
 
-void Topology::_update_indexes(const node* n)
+void Topology::_update_indexes(const node* n, bool transaction)
 {
     assert (n);
     assert (_nodes.size() < MAX_INDEX_ELEM);
@@ -1962,7 +1966,7 @@ void Topology::rebuild_indexes()
 
     for (const edge* e : _edges) {
         if (!e) continue;
-        _update_indexes(e);
+        _update_indexes(e, false);
         if ((*_face_geometries)[e->left_face]) {
             GEOSGeom_destroy_r(hdl, (*_face_geometries)[e->left_face]);
             (*_face_geometries)[e->left_face] = nullptr;
@@ -1975,7 +1979,7 @@ void Topology::rebuild_indexes()
 
     for (const node* n : _nodes) {
         if (!n) continue;
-        _update_indexes(n);
+        _update_indexes(n, false);
     }
 
     // invalidate face geometry cache

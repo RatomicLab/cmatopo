@@ -143,6 +143,12 @@ public:
         return _totalOrphans;
     }
 
+    void print_stats() const {
+        std::cout << "  " << zoneId() << " -- edge count: " << _edges.size()
+             << " node count: " << _nodes.size() << " face count: "
+             << _faces.size() << std::endl;
+    }
+
 private:
     std::vector<node*> _nodes;
     std::vector<edge*> _edges;
@@ -200,6 +206,8 @@ private:
      */
     edge_idx_t* _node_tol_idx = NULL;
 
+    bool _index = true;
+
     /**
      * Total linestrings that were added to this topology.
      */
@@ -240,8 +248,8 @@ private:
     void remove_node(int nodeId);
     void remove_face(int faceId);
 
-    void _update_indexes(const edge* e);
-    void _update_indexes(const node* e);
+    void _update_indexes(const edge* e, bool transaction=true);
+    void _update_indexes(const node* e, bool transaction=true);
 
     void _update_left_face(edge* e, int faceId);
     void _update_right_face(edge* e, int faceId);
@@ -258,7 +266,11 @@ private:
     void _intersects(IndexType* index, const GEOSGeometry* geom, std::vector<int>& ids, double tolerance = 0.);
 
     template<class Archive>
-    void serialize(Archive & ar, const unsigned int version);
+    void save(Archive & ar, const unsigned int version) const;
+    template<class Archive>
+    void load(Archive & ar, const unsigned int version);
+
+    BOOST_SERIALIZATION_SPLIT_MEMBER()
 };
 
 /**
@@ -357,7 +369,7 @@ void Topology::_intersects(IndexType* index, const GEOSGeometry* geom, std::vect
 }
 
 template<class Archive>
-void Topology::serialize(Archive & ar, const unsigned int version)
+void Topology::save(Archive & ar, unsigned int version) const
 {
     ar & _nodes;
     ar & _edges;
@@ -370,6 +382,23 @@ void Topology::serialize(Archive & ar, const unsigned int version)
     if (version > 0) {
         ar & _totalOrphans;
     }
+}
+
+template<class Archive>
+void Topology::load(Archive & ar, unsigned int version)
+{
+    ar & _nodes;
+    ar & _edges;
+    ar & _faces;
+    ar & _relations;
+    ar & _zoneId;
+    ar & _totalCount;
+    ar & _topogeom_relations;
+
+    if (version > 0) {
+        ar & _totalOrphans;
+    }
+    _index = false;
 }
 
 } // namespace cma
