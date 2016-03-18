@@ -1,5 +1,6 @@
 #include <zones.h>
 
+#include <chrono>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -347,11 +348,14 @@ Topology* restore_topology(GEOSHelper* geos, zone* z, bool buildIndex)
         return nullptr;
     }
 
-    Topology* t = new Topology();
+    Topology* t = new Topology(geos);
     try {
+        auto start = chrono::steady_clock::now();
         boost::archive::binary_iarchive ia(ifs);
         ia >> *t;
-        cout << "[" << world.rank() << "] restored topology for zone #" << z->id() << " from " << oss.str() << endl;
+        auto end = chrono::steady_clock::now();
+        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start);
+        cout << "[" << world.rank() << "] restored topology for zone #" << z->id() << " from " << oss.str() << "(took: " << elapsed.count() << " ms)" << endl;
     } catch (const boost::archive::archive_exception&) {
         cout << "[" << world.rank() << "] error restoring topology for zone #" << z->id() << " from " << oss.str() << endl;
         delete t;
@@ -377,12 +381,18 @@ void save_topology(GEOSHelper* geos, zone* z, Topology* t)
     ostringstream oss;
     oss << "topology-" << geos->as_hex_string(z->geom()) << ".ser";
 
+    communicator world;
+
     cout << "saving topology for zone #" << z->id() << " to " << oss.str() << endl;
 
+    auto start = chrono::steady_clock::now();
     ofstream ofs(oss.str());
     boost::archive::binary_oarchive oa(ofs);
     oa << *t;
     ofs.close();
+    auto end = chrono::steady_clock::now();
+    auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "[" << world.rank() << "] done saving zone #" << z->id() << " from " << oss.str() << "(took: " << elapsed.count() << " ms)" << endl;
 }
 
 bool restore_zones(vector<zone*>& zones, vector<depth_group_t>& groups)
