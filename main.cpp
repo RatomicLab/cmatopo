@@ -55,6 +55,9 @@ int main(int argc, char **argv)
     communicator world;
 
     int ret = -1;
+    bool merge_only = false;
+    bool restore = true;
+    int first_merge_step = 0;
     string postgres_connect_str;
     po::variables_map vm;
     if (world.rank() == 0) {
@@ -62,6 +65,9 @@ int main(int argc, char **argv)
         desc.add_options()
             ("help", "Produce help message")
             ("db", po::value<string>()->required(), "PostgreSQL connect string (required)")
+            ("merge-only", "Skip to merge phase (default: 0/false)")
+            ("no-merge-restore", "Don't restore merged topologies (default: restore)")
+            ("merge-step", po::value<int>()->default_value(0), "Merge step to resume (default: 0/all steps)")
         ;
 
         try {
@@ -73,7 +79,10 @@ int main(int argc, char **argv)
                 ret = 1;
             }
             else {
+                merge_only = vm.count("merge-only");
+                restore = !vm.count("no-merge-restore");
                 postgres_connect_str = vm["db"].as<string>();
+                first_merge_step = vm["merge-step"].as<int>();
             }
         } catch (const po::required_option&) {
             cerr << desc << endl;
@@ -86,6 +95,9 @@ int main(int argc, char **argv)
         return ret;
     }
 
+    broadcast(world, restore, 0);
+    broadcast(world, merge_only, 0);
+    broadcast(world, first_merge_step, 0);
     broadcast(world, postgres_connect_str, 0);
 
     initGEOS(geos_message_function, geos_message_function);
@@ -169,7 +181,9 @@ int main(int argc, char **argv)
     }
 
     list<zone*> myZones;
-    scatter(world, *processZones, myZones, 0);
+    if (!merge_only) {
+        scatter(world, *processZones, myZones, 0);
+    }
 
     processZones->clear();
 
@@ -271,14 +285,6 @@ int main(int argc, char **argv)
 
     broadcast(world, zones, 0);
 
-    int allplines;
-    reduce(world, pline, allplines, std::plus<int>(), 0);
-
-    if (world.rank() == 0) {
-        cout << "processed " << allplines << " lines in first pass." << endl;
-        // assert (allplines == processingLineCount);
-    }
-
     vector<int> topologiesToMerge;
 
     for (depth_group_t g : groups) {
@@ -307,6 +313,62 @@ int main(int argc, char **argv)
 
             get_next_groups(groups, next_groups);
             assert (next_groups.size() > 0);
+
+            if (merge_step < first_merge_step)
+            {
+                /**
+                 * If we skip a step, we need to compute the merged zones envelope.
+                 */
+                cout << "[" << world.rank() << "] skipping merge step " << merge_step << endl;
+                for (int gIdx = 0; gIdx < next_groups.size(); ++gIdx) {
+
+                    int mergedZoneId = next_groups[gIdx].second[0];
+                    OGREnvelope envelope = get_zone_by_id(zones, next_groups[gIdx].second[0])->envelope();
+
+                    assert (next_groups[gIdx].second.size() == 4);
+
+                    to_delete.clear();
+                    for (int i = 0; i < 4; ++i) {
+                        if (i > 0) {
+                            envelope.Merge(get_zone_by_id(zones, next_groups[gIdx].second[i])->envelope());
+                        }
+
+                        zone* z = *find_if(
+                            begin(zones),
+                            end(zones),
+                            [next_groups,gIdx,i](const zone* z) {
+                                return z->id() == next_groups[gIdx].second[i];
+                            }
+                        );
+
+                        to_delete.push_back(z);
+                    }
+
+                    zone* merged_zone = new zone(mergedZoneId, envelope);
+
+                    orderedZones.insert(
+                        find_if(
+                            begin(orderedZones),
+                            end(orderedZones),
+                            [merged_zone](const zone* a) {
+                                return merged_zone->id() == a->id();
+                            }
+                        ),
+                        merged_zone
+                    );
+                    zones.push_back(merged_zone);
+
+                    for (zone* z : to_delete) {
+                        zones.erase(find(begin(zones), end(zones), z));
+                        orderedZones.erase(find(begin(orderedZones), end(orderedZones), z));
+                    }
+                    to_delete.clear();
+                }
+
+                broadcast(world, zones, 0);
+                ++merge_step;
+                continue;
+            }
 
             cout << "[" << world.rank() << "] merge step " << merge_step++
                  << " (zone count: " << zones.size() << ", group count: "
@@ -360,13 +422,20 @@ int main(int argc, char **argv)
             broadcast(world, fz1, 0);
         }
         else {
+            if (merge_step < first_merge_step) {
+                delete_all(zones);
+                broadcast(world, zones, 0);
+                ++merge_step;
+                continue;
+            }
+
             slave_exchange_topologies(geos.get(), topologiesToMerge);
         }
 
         // pair-wise merge
         vector<zone*> newZones;
         orphan_count +=
-            merge_topologies(db, geos.get(), zones, topologiesToMerge, newZones);
+            merge_topologies(db, geos.get(), zones, topologiesToMerge, newZones, restore);
         assert (topologiesToMerge.empty());
 
         vector< vector<zone*> > vz;
@@ -410,7 +479,6 @@ int main(int argc, char **argv)
         cout << orphan_count << " total orphans added." << endl;
         cout << "total processed lines: " << zones[0]->count() << endl;
     }
-
 
     assert (zones.size() == 1);
     if (world.rank() == 0) {
