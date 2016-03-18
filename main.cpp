@@ -106,6 +106,8 @@ int main(int argc, char **argv)
     unique_ptr<GEOSHelper> geos(new GEOSHelper());
     assert (hdl != NULL);
 
+    geom_container::s_wkbr = GEOSWKBReader_create();
+
     PG db(postgres_connect_str);
     if (!db.connected()) {
         cerr << "Could not connect to PostgreSQL." << endl;

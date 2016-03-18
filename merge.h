@@ -37,7 +37,8 @@ int merge_topologies(
     GEOSHelper* geos,
     std::vector<zone*> zones,     // get a copy of the zones, this is not a mistake
     std::vector<int>& topologies,
-    std::vector<zone*>& new_zones
+    std::vector<zone*>& new_zones,
+    bool merge_restore = true
 );
 
 /**
@@ -66,7 +67,8 @@ int _internal_merge(
     std::vector<zone*>& zones,
     Topology** t1,
     Topology* t2,
-    std::vector<zone*>& new_zones);
+    std::vector<zone*>& new_zones,
+    bool merge_restore);
 
 } // namespace cma
 

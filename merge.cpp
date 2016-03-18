@@ -2,6 +2,7 @@
 
 #include <zones.h>
 
+#include <chrono>
 #include <memory>
 #include <vector>
 #include <functional>
@@ -125,7 +126,8 @@ int merge_topologies(
     GEOSHelper* geos,
     vector<zone*> zones,
     vector<int>& topologies,
-    vector<zone*>& new_zones)
+    vector<zone*>& new_zones,
+    bool merge_restore)
 {
     assert (new_zones.empty());
 
@@ -142,15 +144,21 @@ int merge_topologies(
 
         for (int j = 0; j < 2; ++j)
         {
-            Topology* t1 = restore_topology(geos, get_zone_by_id(zones, topologies[i*4+j*2]));
+            Topology* t1 = restore_topology(geos, get_zone_by_id(zones, topologies[i*4+j*2]), false);
             Topology* t2 = restore_topology(geos, get_zone_by_id(zones, topologies[i*4+j*2+1]), false);
+            if (!t1) {
+                cout << "[" << world.rank() << "] (fatal t1) topology for zone #" << topologies[i*4+j*2] << " could not be restored" << endl;
+            }
+            if (!t2) {
+                cout << "[" << world.rank() << "] (fatal t2) topology for zone #" << topologies[i*4+j*2+1] << " could not be restored" << endl;
+            }
             assert (t1 && t2);
 
             int z2_id = t2->zoneId();
 
             Topology* t1t = t1;
             orphan_count +=
-                _internal_merge(db, geos, zones, &t1, t2, temp_new_zones);
+                _internal_merge(db, geos, zones, &t1, t2, temp_new_zones, merge_restore);
             if (t1 != t1t) {
                 // a swap occured
                 topologies[i*4+j*2] = t1->zoneId();
@@ -173,7 +181,7 @@ int merge_topologies(
 
         int z2_id = t[1]->zoneId();
 
-        orphan_count += _internal_merge(db, geos, zones, &t[0], t[1], new_zones);
+        orphan_count += _internal_merge(db, geos, zones, &t[0], t[1], new_zones, merge_restore);
 
         zones.erase(find_if(zones.begin(), zones.end(), [t](const zone* z) {
             return z->id() == t[0]->zoneId();
@@ -274,9 +282,12 @@ int _internal_merge(
     vector<zone*>& zones,
     Topology** t1,
     Topology* t2,
-    vector<zone*>& new_zones)
+    vector<zone*>& new_zones,
+    bool merge_restore)
 {
     communicator world;
+
+    cout << "_internal_merge merge_restore: " << (merge_restore ? "true" : "false") << endl;
 
     // prepare the merged zone right now to see if we have a checkpoint file
     zone* z1 = get_zone_by_id(zones, (*t1)->zoneId());
@@ -286,7 +297,10 @@ int _internal_merge(
     envelope.Merge(z2->envelope());
     zone* merged_zone = new zone((*t1)->zoneId(), envelope);
 
-    Topology* restored = restore_topology(geos, merged_zone);
+    Topology* restored = nullptr;
+    if (merge_restore) {
+        restored = restore_topology(geos, merged_zone, false);
+    }
 
     if (restored) {
         // swap the restored geometry with the current (unmerged) one
@@ -294,30 +308,31 @@ int _internal_merge(
         *t1 = restored;
     }
     else {
+        cout << "[" << world.rank() << "] will merge topologies " << (*t1)->zoneId()
+             << " and " << t2->zoneId() << endl;
         merge_topologies(**t1, *t2);
-        (*t1)->rebuild_indexes();
     }
     delete t2;
 
-    /*
-    if (restored && (*t1)->orphan_count() >= 0) {
-        merged_zone->count(z1->count() + z2->count() + (*t1)->orphan_count());
-        new_zones.push_back(merged_zone);
-        return (*t1)->orphan_count();
-    }
-    */
+    cout << "[" << world.rank() << "] merge done (or restored)" << endl;
 
     linesV orphans;
-    db.get_common_lines(z1->envelope(), z2->envelope(), orphans);
-    cout << "[" << world.rank() << "] adding " << orphans.size() << " lines to topology #"
-         << (*t1)->zoneId() << " (lc: " << z1->count() << "+" << z2->count() << ")" << endl;
-    size_t orphan_count = orphans.size();
+    size_t orphan_count;
+    if (!restored || (*t1)->orphan_count() == -1) {         // -1 is for version 0 serializations
+        db.get_common_lines(z1->envelope(), z2->envelope(), orphans);
+        cout << "[" << world.rank() << "] adding " << orphans.size() << " lines to topology #"
+             << (*t1)->zoneId() << " (lc: " << z1->count() << "/" << (*t1)->count() << "+" << z2->count() << "/" << t2->count() << ")" << endl;
+        orphan_count = orphans.size();
+    }
+    else {
+        orphan_count = (*t1)->orphan_count();
+    }
 
     merged_zone->count(z1->count() + z2->count() + orphan_count);
     new_zones.push_back(merged_zone);
 
     if (restored) {
-        (*t1)->orphan_count() += orphan_count;
+        (*t1)->orphan_count() = orphan_count;
         save_topology(geos, merged_zone, *t1);
 
         for (auto& orphan : orphans) {
@@ -329,6 +344,17 @@ int _internal_merge(
         return orphan_count;
     }
 
+    if (!orphans.empty()) {
+        cout << "[" << world.rank() << "] rebuilding index..." << endl;
+        auto start = chrono::steady_clock::now();
+        (*t1)->rebuild_indexes();
+        auto end = chrono::steady_clock::now();
+        auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start);
+        cout << "[" << world.rank() << "] took " << elapsed.count() << " ms." << endl;
+    }
+
+    auto start = chrono::steady_clock::now();
+    int lc = 0;
     for (pair<int, GEOSGeometry*>& orphan : orphans) {
         int lineId = orphan.first;
         GEOSGeometry* line = orphan.second;
@@ -340,15 +366,18 @@ int _internal_merge(
             (*t1)->rollback();
         }
         GEOSGeom_destroy_r(hdl, line);
+        if (++lc % 5 == 0) {
+            cout << "[" << world.rank() << "] " << lc << endl;
+        }
     }
+    auto end = chrono::steady_clock::now();
+    auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - start);
 
     cout << "[" << world.rank() << "] added new merged topology for"
-         << " zone #" << (*t1)->zoneId() << " (lc: " << merged_zone->count() << ")" << endl;
+         << " zone #" << (*t1)->zoneId() << " (lc: " << merged_zone->count() << ") -- took: " << elapsed.count() << " ms." << endl;
+    (*t1)->print_stats();
 
-    for (auto& orphan : orphans) {
-        GEOSGeometry *geom = orphan.second;
-        GEOSGeom_destroy_r(hdl, geom);
-    }
+    // orphan lines were already deleted in the above loop
     orphans.clear();
 
     save_topology(geos, merged_zone, *t1);
