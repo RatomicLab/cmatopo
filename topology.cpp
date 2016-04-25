@@ -12,7 +12,7 @@
 
 using namespace std;
 
-const int MAX_INDEX_ELEM = 150000000;
+const int MAX_INDEX_ELEM = 300000000;
 
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
@@ -732,7 +732,12 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
     face* newFace = new face;
     newFace->id = _faces.size();
     if (faceId != 0 && !isccw) {
-        newFace->geom = GEOSGeom_clone_r(hdl, _faces[faceId]->geom);
+        if (_faces[faceId]->geom == nullptr) {
+            newFace->geom = nullptr;
+        }
+        else {
+            newFace->geom = GEOSGeom_clone_r(hdl, _faces[faceId]->geom);
+        }
     }
     else {
         // Don't use GEOSEnvelope_r here since you won't get the same order as ST_Envelope.
@@ -771,7 +776,7 @@ int Topology::_ST_AddFaceSplit(int edgeId, int faceId, bool mbrOnly)
         {
             GEOSGeom closestPoint = ST_LineInterpolatePoint(e->geom, 0.2);
             // sqlmm.sql.in:~3092
-            bool c = GEOSIntersects_r(hdl, env, e->envelope()) == 1 && ST_Contains(shell_geoms, closestPoint);
+            bool c = e->envelope() && GEOSIntersects_r(hdl, env, e->envelope()) == 1 && ST_Contains(shell_geoms, closestPoint);
             GEOSGeom_destroy_r(hdl, closestPoint);
 
             c = ishole ? !c : c;
@@ -1134,13 +1139,6 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         _transactions->push_back(new FaceTransaction(*this, f));
 
         GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->left_face);
-        if (!faceGeom) {
-            // this should not (?) happen
-            ostringstream oss;
-            oss << "faceGeom is null when inserting line " << _totalCount
-                << " for zone #" << zoneId();
-            throw runtime_error(oss.str());
-        }
         f->geom = ST_Envelope(faceGeom);
     }
 
@@ -1150,13 +1148,6 @@ int Topology::ST_ChangeEdgeGeom(int edgeId, const GEOSGeom acurve)
         _transactions->push_back(new FaceTransaction(*this, f));
 
         GEOSGeometry* faceGeom = ST_GetFaceGeometry(oldEdge->right_face);
-        if (!faceGeom) {
-            // this should not (?) happen
-            ostringstream oss;
-            oss << "faceGeom is null when inserting line " << _totalCount
-                << " for zone #" << zoneId();
-            throw runtime_error(oss.str());
-        }
         f->geom = ST_Envelope(faceGeom);
     }
 
@@ -1793,11 +1784,13 @@ void Topology::add_node(node* n)
 void Topology::add_face(face* f)
 {
     assert (f);
-    assert (f->geom);
+    // assert (f->geom);
     assert (f->id == _faces.size());
     assert (f->id == _left_faces_idx->size());
     assert (f->id == _right_faces_idx->size());
-    assert (GEOSGeomTypeId_r(hdl, f->geom) == GEOS_POLYGON);
+    if (f->geom != nullptr) {
+        assert (GEOSGeomTypeId_r(hdl, f->geom) == GEOS_POLYGON);
+    }
 
     _faces.push_back(f);
 

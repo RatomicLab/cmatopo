@@ -39,6 +39,8 @@ bool PG::connected() const
 
 PGresult* PG::query(const string& sql, bool single_row_mode)
 {
+    cout << sql << endl;
+
     if (!single_row_mode) {
         return PQexec(_conn, sql.c_str());
     }

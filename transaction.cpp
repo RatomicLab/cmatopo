@@ -66,7 +66,7 @@ FaceTransaction::FaceTransaction(Topology& topology, face* f)
 
 FaceTransaction::~FaceTransaction()
 {
-    if (_topology._faces[_face->id]->geom == _face->geom
+    if (_face->geom == nullptr || _topology._faces[_face->id]->geom == _face->geom
      || _is_in(_face->geom, *_topology._tr_track_geom))
     {
         _face->geom = nullptr;

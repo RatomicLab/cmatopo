@@ -5,6 +5,7 @@
 
 namespace cma {
     extern GEOSContextHandle_t hdl;
+    GEOSWKBReader* geom_container::s_wkbr = nullptr;
 }
 
 namespace cma {
@@ -65,7 +66,10 @@ const GEOSPreparedGeometry* geom_container::prepared()
 
 const GEOSGeometry* geom_container::envelope()
 {
-    assert (geom);
+    if (!geom) {
+        return nullptr;
+    }
+
     if (!_envelope) {
         _envelope = GEOSEnvelope_r(hdl, geom);
     }
