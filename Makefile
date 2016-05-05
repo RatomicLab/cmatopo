@@ -5,14 +5,10 @@ program_SRCS := $(filter-out serdump.cpp main.cpp, $(wildcard *.cpp))
 program_OBJS := ${program_SRCS:.cpp=.o}
 
 program_INCLUDE_DIRS := .
-#program_INCLUDE_DIRS += /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/include
-program_INCLUDE_DIRS += /home/laurent/src/postgis-2.1.8/liblwgeom
-#program_INCLUDE_DIRS += /Users/laurent/software/elcapitan/postgis/2.1.8_intel15_dbg/include
+program_INCLUDE_DIRS += /path/to/postgis-2.1.8/liblwgeom
 program_INCLUDE_DIRS += /usr/local/include
 
-#program_LIBRARY_DIRS := /Users/laurent/software/elcapitan/postgis/2.1.8_intel15/lib
-program_LIBRARY_DIRS := /home/laurent/src/postgis-2.1.8/liblwgeom
-#program_LIBRARY_DIRS := /Users/laurent/software/elcapitan/postgis/2.1.8_intel15_dbg/lib
+program_LIBRARY_DIRS := /path/to/postgis-2.1.8/liblwgeom
 program_LIBRARY_DIRS += /usr/local/lib
 
 
